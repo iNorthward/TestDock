@@ -279,10 +279,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .ins-report-body{padding:12px;font-size:12px}
 }
 </style>
+<link rel="stylesheet" href="/assets/platform-panel.css"><link rel="stylesheet" href="/assets/reference-workspace.css"><link rel="stylesheet" href="/assets/workspace-shell.css"><script src="/assets/workspace-shell.js" defer></script>
 </head>
 <body>
-<div class="app">
-  <header class="panel-headbar">
+<div class="app-shell"><aside class="sidebar"><a class="brand" href="/#/home"><img src="/assets/icons/favicon.svg" alt=""><div><strong>TestDock</strong><small>测试验收平台</small></div></a></aside><div class="workspace">
+  <header class="topbar panel-headbar"><div class="workspace-bar-label">已打开</div><div class="workspace-tabs" id="workspace-tabs"></div>
     <div class="panel-headbar__left">
       <h1 class="panel-headbar__title">平台诊断</h1>
       <span class="panel-headbar__sub" id="genAt"></span>
@@ -316,7 +317,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <section id="tab-history" style="display:none"></section>
     <section id="tab-flaky" style="display:none"></section>
   </main>
-</div>
+</div></div>
 <script>
 const $ = (s,r=document)=>r.querySelector(s);
 const el=(t,c)=>{const e=document.createElement(t);if(c)e.className=c;return e;};
@@ -355,7 +356,9 @@ async function loadCaseIndex(){
   }catch(e){console.warn('catalog lite',e);}
 }
 
-const allowedTabs=new Set(['env-preflight','validate','history','flaky']);
+// Core diagnostics remain discoverable before a project supplies their inputs.
+// Pack capabilities control optional business services, not these built-in pages.
+const allowedTabs=new Set(['env-preflight','inspect','coverage','validate','db-inspection','history','flaky']);
 function switchTab(name){
   if(!allowedTabs.has(name))name='validate';
   if(activeTab==='db-inspection'&&name!=='db-inspection') abortDbInspectionStreams();
@@ -374,7 +377,7 @@ function switchTab(name){
   const u=new URL(location.href);
   if(name==='coverage')u.searchParams.delete('tab');
   else u.searchParams.set('tab',name);
-  history.replaceState(null,'',u.pathname+u.search);
+  history.replaceState(null,'',u.pathname+u.search);window.WorkspaceShell?.open(location.href,({'inspect':'Apifox 巡检','db-inspection':'数据库巡检','history':'运行历史','coverage':'接口覆盖','validate':'结构体检','env-preflight':'环境预检','flaky':'Flaky 用例','error-log':'异常日志'})[name]||'测试洞察');
 }
 
 async function loadValidate(){
@@ -573,6 +576,16 @@ async function loadDbInspection(){
 
   lastPatrolResult=cached||null;
   renderDbInspectionTab(cached);
+  try{
+    const preflight=await api('/api/env-preflight');
+    const database=(preflight.groups||[]).find(group=>group.id==='database');
+    const missing=database&&database.missing||[];
+    if(missing.length){
+      const notice=el('div','ins-empty-state');
+      notice.textContent=`数据库巡检尚未配置：${missing.join('、')}。还需配置数据库名 PLATFORM_DB_NAME 与本项目 schema 路径 PLATFORM_SCHEMA_JSON；请在项目环境文件或 Pack 中提供配置后巡检。`;
+      $('#dbInsModIntro .ins-mod-bd')?.prepend(notice);
+    }
+  }catch(error){console.warn('数据库配置预检失败',error);}
 }
 
 async function runDbPatrol(){
@@ -2592,6 +2605,7 @@ function runErrorLogAudit(){
 }
 
 (async function init(){
+  if(new URLSearchParams(location.search).get('tab')==='whitepaper'){location.replace('/whitepaper');return;}
   loadStoredInspect();
   await loadCaseIndex();
   try {
@@ -2604,7 +2618,7 @@ function runErrorLogAudit(){
   } catch(error) { console.error('项目能力读取失败',error); }
   document.querySelectorAll('.ins-tab').forEach(node=>node.hidden=!allowedTabs.has(node.dataset.tab));
   const tab=new URLSearchParams(location.search).get('tab');
-  if(tab&&['env-preflight','inspect','coverage','validate','db-inspection','error-log','history','flaky'].includes(tab)) switchTab(tab);
+  if(tab&&allowedTabs.has(tab)) switchTab(tab);
   else switchTab('validate');
 })();
 </script>

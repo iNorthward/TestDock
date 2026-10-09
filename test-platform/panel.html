@@ -7,35 +7,42 @@
 <script src="/assets/theme-boot.js"></script>
 <link rel="stylesheet" href="/assets/theme-bundle.css">
 <link rel="stylesheet" href="/assets/platform-panel.css">
+<link rel="stylesheet" href="/assets/reference-workspace.css">
+<link rel="stylesheet" href="/assets/workspace-shell.css">
 <script src="/assets/theme-switcher.js" defer></script>
 <script src="/assets/execution-client.js"></script>
+<script src="/assets/workspace-shell.js" defer></script>
 </head>
 <body>
 <div class="app-shell">
 <aside class="sidebar" aria-label="工作台导航">
-<a class="brand" href="/"><img src="/assets/icons/favicon.svg" alt=""><div><strong>测试平台</strong><small>Testing workspace</small></div></a>
-<div class="nav-label">Workspace</div>
+<a class="brand" href="/#/home"><img src="/assets/icons/favicon.svg" alt=""><div><strong>TestDock</strong><small>测试验收平台</small></div></a>
+<div class="nav-label">工作台</div>
 <nav>
-<button class="nav-item active" id="nav-cases" type="button"><span class="nav-icon" aria-hidden="true">▦</span>用例工作台</button>
+<a class="nav-item" href="/#/home">🏠 首页</a>
+<button class="nav-item active" id="nav-cases" type="button" hidden><span class="nav-icon" aria-hidden="true">▦</span>全部用例</button>
 <button class="nav-item" id="nav-resources" type="button" hidden><span class="nav-icon" aria-hidden="true">◇</span><span id="resource-nav-label">项目资源</span></button>
-<a class="nav-item" href="/insights?tab=history"><span class="nav-icon" aria-hidden="true">◷</span>运行历史</a>
-<a class="nav-item" href="/insights"><span class="nav-icon" aria-hidden="true">⌘</span>平台诊断</a>
+<div class="nav-suite-head"><div class="nav-suite-title">测试用例</div><div class="nav-suite-stats"><span class="nav-suite-total" id="nav-case-total">—</span><span class="nav-suite-unit">条用例</span></div><div class="nav-suite-meta">来自当前项目 Pack</div></div><div id="suite-nav"></div><div class="nav-label">文档</div>
+<a class="nav-item" href="/whitepaper"><span class="nav-icon" aria-hidden="true">▤</span>平台白皮书</a>
 </nav>
 <div class="sidebar-footer"><div class="project-card"><small>当前项目</small><div class="project-name"><span class="dot"></span><span id="pack-badge">加载中</span></div></div></div>
 </aside>
 <div class="workspace">
-<header class="topbar"><div class="breadcrumb">工作台<span id="breadcrumb-current">用例目录</span></div><div class="topbar-tools"><span class="workspace-label"><span class="dot"></span>本地工作区</span><div data-theme-picker></div></div></header>
+<header class="topbar panel-headbar"><div class="workspace-bar-label">已打开</div><div id="workspace-tabs" class="workspace-tabs"></div><div class="breadcrumb">工作台<span id="breadcrumb-current">用例目录</span></div><div class="topbar-tools"><span class="workspace-label"><span class="dot"></span>本地工作区</span><div data-theme-picker></div></div></header>
 <main class="content">
-<div class="eyebrow">Test operations</div>
-<div class="page-heading"><div><h1 id="page-title">用例工作台</h1><p class="subtitle" id="page-description">查看项目用例，让每一次执行都有迹可循。</p></div><button class="btn" id="reload" type="button">↻ 刷新目录</button></div>
-<section id="case-view">
-<div class="stats" role="group" aria-label="用例概览">
+<div class="page-crumb"><a href="/#/home">← 测试用例总览</a><span id="suite-trail"></span></div>
+<section id="home-view" hidden><h1>测试用例总览</h1><div class="sub">选择用例分组快速进入 · 进入后顶部「← 测试用例总览」可返回</div><div class="home-layout"><div class="home-main"><div class="home-section-row"><h2 class="home-section">测试用例</h2><span id="home-total" class="home-section-total"></span></div><div class="home-panel" id="home-suites"></div></div><div class="home-side"><div class="stats" role="group" aria-label="用例概览">
 <div class="stat"><div class="stat-label">项目用例</div><div class="stat-value" id="total-cases">—</div><div class="stat-note">来自当前项目的用例目录</div></div>
 <div class="stat"><div class="stat-label">只读 / SAFE</div><div class="stat-value" id="safe-cases">—</div><div class="stat-note">可从工作台发起执行</div></div>
 <div class="stat"><div class="stat-label">测试套件</div><div class="stat-value" id="total-suites">—</div><div class="stat-note">按项目定义组织测试</div></div>
-</div>
-<section class="panel" aria-labelledby="catalog-title"><div class="panel-header"><div><div class="panel-title" id="catalog-title">用例目录</div><div class="panel-subtitle">选择用例执行，结果会显示在下方。</div></div><label class="search"><span aria-hidden="true">⌕</span><input id="filter" type="search" placeholder="搜索 ID、名称或分组" aria-label="筛选用例"></label></div><div class="table-label" aria-hidden="true"><span>用例 ID</span><span>测试内容</span><span>执行模式</span><span>操作</span></div><div id="cases" aria-live="polite"></div></section>
-<section class="panel result-panel" aria-labelledby="result-title"><div class="panel-header"><div class="panel-title" id="result-title">执行结果</div><div><button id="job-resume" class="btn small" type="button" hidden>恢复查询</button> <button id="job-cancel" class="btn small" type="button" hidden>取消任务</button> <span id="result-status" class="tag">等待执行</span></div></div><pre class="result-content" id="result" tabindex="0" aria-live="polite">选择一个 SAFE 用例，执行结果将在这里显示。</pre></section>
+</div><div class="home-section-row"><h2 class="home-section">工具</h2></div><div class="home-panel home-tool-table"><a class="home-tool-row" href="/insights?tab=inspect"><span class="ht-ico">🔄</span><div><div class="ht-title">Apifox 巡检</div><div class="ht-desc">契约差异 · 接口覆盖 · 巡检报告</div></div></a><a class="home-tool-row" href="/insights?tab=db-inspection"><span class="ht-ico">🗄</span><div><div class="ht-title">数据库巡检</div><div class="ht-desc">表结构变更 · 影响分析 · Schema 报告</div></div></a></div><div class="home-section-row"><h2 class="home-section">洞察</h2></div><div class="home-panel home-tool-table"><a class="home-tool-row" href="/insights"><span class="ht-ico">📊</span><div><div class="ht-title">测试洞察面板</div><div class="ht-desc">接口覆盖 · 回归历史 · Flaky 检测</div></div></a></div><div class="home-section-row"><h2 class="home-section">文档</h2></div><div class="home-panel home-tool-table"><a class="home-tool-row" href="/whitepaper"><span class="ht-ico">📖</span><div><div class="ht-title">平台白皮书</div><div class="ht-desc">运行模式 · 用例系列 · 环境与验收规范</div></div></a></div></div></div></section>
+<div class="page-heading"><div><h1 id="page-title">用例工作台</h1><p class="subtitle" id="page-description">查看项目用例，让每一次执行都有迹可循。</p></div><button class="btn" id="reload" type="button">↻ 刷新目录</button></div>
+<section id="case-view">
+<div class="bar"><button class="safe" id="batch-safe-bar">▶ 运行本组 SAFE</button><button class="live" id="batch-live">▶ 运行本组 LIVE</button><button class="safe" id="rerun-failed">↻ 重跑失败</button><span id="group-status" class="muted"></span></div><div class="case-filter"><div id="series-chips" class="chips"></div><button class="btn small" id="batch-safe" hidden>运行本组 SAFE</button><span id="filter-count" class="muted"></span></div>
+
+<div class="case-filter"><input id="filter" type="search" placeholder="搜索用例 ID / 描述 / 参数" aria-label="筛选用例"><button class="chip" id="only-failed">仅失败</button></div>
+<div class="tw"><table class="case-table"><thead><tr><th>用例</th><th>子类</th><th>描述</th><th>参数</th><th>预期</th><th>执行</th><th>结果</th></tr></thead><tbody id="cases" aria-live="polite"></tbody></table></div>
+<section class="panel result-panel" aria-labelledby="result-title"><div class="panel-header"><div class="panel-title" id="result-title">执行结果</div><div><button id="job-resume" class="btn small" type="button" hidden>恢复查询</button> <button id="job-cancel" class="btn small" type="button" hidden>取消任务</button> <span id="result-status" class="tag">等待执行</span></div></div><div id="result-summary" class="result-summary"></div><pre class="result-content" id="result" tabindex="0" aria-live="polite">选择一个 SAFE 用例，执行结果将在这里显示。</pre></section>
 </section>
 <section id="resource-view" class="panel" hidden><div class="panel-header"><div><div class="panel-title" id="resource-title">项目资源</div><div class="panel-subtitle" id="resource-description"></div></div><button id="identity-reload" class="btn small" type="button">刷新资源</button></div><div id="identity-categories" class="resources" aria-live="polite"></div><div id="resource-maintenance" class="maintenance"></div></section>
 <div class="status-bar" id="status" role="status"><span id="status-text">正在加载工作区…</span><span>测试平台</span></div>
@@ -43,42 +50,70 @@
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
-let allCases = [], resourceDefinition = {enabled:false}, currentView = 'cases', activeRun=null, packId='', watching=false;
+let allCases = [], resourceDefinition = {enabled:false}, currentView = 'home', activeRun=null, packId='', watching=false;
+let suites=[],selectedSuite='',selectedSeries='all',onlyFailed=false,loadedSuite=null;const caseResults=new Map();
 const setText = (id, value) => { $(id).textContent = value; };
 async function api(path, options) { const reply=await fetch(path, options); const payload=await reply.json(); if (!reply.ok || !payload.ok) throw new Error(payload.error || '请求失败'); return payload.data; }
-function showStatus(text, error=false){setText('status-text',text);$('status').classList.toggle('error',error);}
+function showStatus(text, error=false){setText('group-status',text);setText('status-text',text);$('status').classList.toggle('error',error);}
 function view(name) {
- if(name==='resources' && !resourceDefinition.enabled) return;
- currentView=name;$('case-view').hidden=name!=='cases';$('resource-view').hidden=name!=='resources';
+ if(name==='resources'&&!resourceDefinition.enabled)return;
+ currentView=name;['cases','resources','home'].forEach(key=>$(key==='cases'?'case-view':key==='resources'?'resource-view':'home-view').hidden=key!==name);
+ document.querySelector('.page-heading').hidden=name==='home';document.querySelector('.page-crumb').hidden=name==='home';document.querySelectorAll('.suite-link').forEach(link=>link.classList.toggle('active',link.dataset.suite===selectedSuite));
  $('nav-cases').classList.toggle('active',name==='cases');$('nav-resources').classList.toggle('active',name==='resources');
- setText('page-title',name==='cases'?'用例工作台':resourceDefinition.title);
- setText('breadcrumb-current',name==='cases'?'用例目录':resourceDefinition.title);
- setText('page-description',name==='cases'?'查看项目用例，让每一次执行都有迹可循。':resourceDefinition.description);
- if(name==='resources') loadResources();
+ const title=name==='resources'?resourceDefinition.title:name==='home'?'测试用例总览':suites.find(s=>s.id===selectedSuite)?.name||'全部测试用例';
+ setText('page-title',title);setText('breadcrumb-current',title);setText('suite-trail',name==='cases'?title:'');
+ setText('page-description',name==='resources'?resourceDefinition.description||'':name==='cases'?'按系列筛选 · 单条执行 · 本组 SAFE 验收':'');
+ if(name==='resources')loadResources();if(name==='cases')renderCases();
+ window.WorkspaceTitle=title;window.WorkspaceShell?.open(location.href,title);
+}
+function readRoute(){
+ const parts=location.hash.slice(2).split('/');selectedSuite=parts[0]==='cases'?decodeURIComponent(parts[1]||''):'';
+ if(loadedSuite!==selectedSuite){loadedSuite=selectedSuite;try{const state=JSON.parse(sessionStorage.getItem('testdock.filters.'+packId+'.'+selectedSuite)||'{}');selectedSeries=state.series||'all';onlyFailed=Boolean(state.onlyFailed);$('filter').value=state.search||'';$('only-failed').classList.toggle('on',onlyFailed);}catch(_){}renderNavigation();}
+ view(parts[0]==='resources'?'resources':parts[0]==='cases'?'cases':'home');
+}
+function enterSuite(id){location.hash='/cases/'+encodeURIComponent(id);}
+function seriesOf(item){const match=String(item.id).match(/-(LIVE|[RFDE])\d*/);return match?match[1]:item.mode==='live'?'LIVE':'R';}
+function renderNavigation(){
+ const nav=$('suite-nav'),home=$('home-suites');nav.replaceChildren();home.replaceChildren();setText('home-total',allCases.length+' 条用例');setText('nav-case-total',allCases.length);
+ const groups=new Map();for(const suite of suites){const parent=suite.parent||'测试用例';if(!groups.has(parent))groups.set(parent,[]);groups.get(parent).push(suite);}
+ for(const [parent,items] of groups){
+  const group=document.createElement('details');group.className='nav-group';const stateKey='testdock.nav.'+parent;group.open=sessionStorage.getItem(stateKey)!=='closed';group.ontoggle=()=>sessionStorage.setItem(stateKey,group.open?'open':'closed');const summary=document.createElement('summary');summary.textContent=parent;group.append(summary);
+  const block=document.createElement('details');block.className='home-block';block.open=true;const heading=document.createElement('summary');heading.className='home-block-hd';heading.textContent=parent+' · '+items.reduce((sum,suite)=>sum+allCases.filter(c=>c.suite===suite.id).length,0)+' 条用例';block.append(heading);
+  for(const suite of items){const cases=allCases.filter(c=>c.suite===suite.id);const link=document.createElement('a');link.className='nav-item suite-link';link.dataset.suite=suite.id;link.href='/#/cases/'+encodeURIComponent(suite.id);link.textContent=suite.name+' · '+cases.length;group.append(link);
+   const row=document.createElement('a');row.className='home-suite-row';row.href=link.href;const name=document.createElement('span');name.className='hsr-side';name.textContent=suite.name;const endpoint=document.createElement('span');endpoint.className='hsr-endpoint';endpoint.textContent=cases.find(c=>c.api)?.api||suite.id;const count=document.createElement('span');count.className='hsr-count';count.textContent=cases.length;row.append(name,endpoint,count);block.append(row);
+  }nav.append(group);home.append(block);
+ }
+ const chips=$('series-chips');chips.replaceChildren();for(const series of ['all','R','F','D','E','LIVE']){const button=document.createElement('button');button.className='chip'+(selectedSeries===series?' on':'');button.textContent=series==='all'?'全部':series;button.onclick=()=>{selectedSeries=series;renderNavigation();renderCases();};chips.append(button);}
+}
+function renderResult(data){
+ const root=$('result-summary');root.replaceChildren();const entries=data.cases||[data];for(const item of entries){if(item.id||item.caseId)caseResults.set(item.id||item.caseId,item);}try{sessionStorage.setItem('testdock.results.'+packId,JSON.stringify([...caseResults]));}catch(_){}for(const item of entries){const row=document.createElement('details');row.open=entries.length===1;const title=document.createElement('summary');title.textContent=(item.id||item.caseId||'执行结果')+' · '+(item.status||(item.ok===true?'passed':item.ok===false?'failed':'incomplete'));const content=document.createElement('pre');content.textContent=JSON.stringify(item.assertions||item.checks||item.result||item,null,2);row.append(title,content);root.append(row);}
 }
 function renderCases(){
+ $('batch-safe').disabled=Boolean(activeRun)||watching||!selectedSuite;$('batch-safe-bar').disabled=$('batch-safe').disabled;$('batch-live').disabled=Boolean(activeRun)||watching||!selectedSuite||!allCases.some(c=>c.suite===selectedSuite&&c.mode==='live');$('rerun-failed').disabled=Boolean(activeRun)||watching||!allCases.some(c=>(!selectedSuite||c.suite===selectedSuite)&&caseResults.get(c.id)?.ok===false);
+ try{sessionStorage.setItem('testdock.filters.'+packId+'.'+selectedSuite,JSON.stringify({series:selectedSeries,onlyFailed,search:$('filter').value}));}catch(_){}
  const root=$('cases'),needle=$('filter').value.trim().toLowerCase();root.replaceChildren();
- const visible=allCases.filter(c=>[c.id,c.desc,c.group,c.suite,c.expected,c.regressionNote].some(v=>String(v||'').toLowerCase().includes(needle)));
+ const inSuite=allCases.filter(c=>!selectedSuite||c.suite===selectedSuite);
+ const visible=inSuite.filter(c=>(selectedSeries==='all'||seriesOf(c)===selectedSeries)&&(!onlyFailed||caseResults.get(c.id)?.ok===false)&&[c.id,c.desc,c.group,c.suite,c.expected,c.api,JSON.stringify(c.params||{})].some(v=>String(v||'').toLowerCase().includes(needle)));
+ setText('filter-count',visible.length+' / '+inSuite.length+' 条');
  for(const item of visible){
-  const row=document.createElement('article');row.className='case-row';
-  const id=document.createElement('div');id.className='case-id';id.textContent=item.id;
-  const info=document.createElement('div');info.className='case-info';const name=document.createElement('div');name.className='case-name';name.textContent=item.desc;
-  const desc=document.createElement('div');desc.className='case-description';desc.textContent=item.expected||item.suite||'';info.append(name,desc);
-  if(item.regressionNote){const note=document.createElement('div');note.className='case-description';note.textContent=item.regressionNote;info.append(note);}
-  const mode=document.createElement('div'),tag=document.createElement('span');tag.className='tag '+(item.mode==='live'?'live':'safe');tag.textContent=(item.mode||'safe').toUpperCase();mode.append(tag);
-  const run=document.createElement('button');run.className='btn small primary';run.type='button';run.textContent=item.regressionExcluded?'本轮排除':item.mode==='live'?'受控执行':'运行用例';run.disabled=Boolean(activeRun)||watching||item.mode==='live'||Boolean(item.regressionExcluded);run.addEventListener('click',()=>runCase(item,run));
-  row.append(id,info,mode,run);root.append(row);
+  const row=document.createElement('tr');row.className='case-row';const result=caseResults.get(item.id);if(result)row.classList.add(result.ok===true?'case-row-pass':result.ok===false?'case-row-fail':'case-row-incomplete');
+  const cell=(value,className='')=>{const td=document.createElement('td');td.className=className;td.textContent=value||'—';return td;};
+  const id=cell(item.id,'case-id'),group=cell(item.group),info=cell(item.desc),params=cell(JSON.stringify(item.params||{})),expected=cell(item.expected),action=cell(''),status=cell(result?(result.status||(result.ok===true?'通过':result.ok===false?'失败':'未完成')):'未执行');
+  const detail=document.createElement('details');detail.className='case-detail';const summary=document.createElement('summary');summary.textContent='接口与详情';const pre=document.createElement('pre');pre.textContent=JSON.stringify(item,null,2);detail.append(summary,pre);info.append(detail);
+  const run=document.createElement('button');run.className='btn small';run.textContent=item.regressionExcluded?'本轮排除':'执行';run.disabled=Boolean(activeRun)||watching||Boolean(item.regressionExcluded);run.onclick=()=>runCase(item,run);action.replaceChildren(run);const tag=document.createElement('span');tag.className='tag '+(item.mode==='live'?'live':'safe');tag.textContent=(item.mode||'safe').toUpperCase();id.append(document.createElement('br'),tag);
+  if(result){const detail=document.createElement('details');const summary=document.createElement('summary');summary.textContent='查看结果';const pre=document.createElement('pre');pre.textContent=JSON.stringify(result,null,2);detail.append(summary,pre);status.append(detail);}
+  row.append(id,group,info,params,expected,action,status);root.append(row);
  }
- if(!visible.length){const empty=document.createElement('div');empty.className='empty-state';empty.textContent=needle?'没有匹配的用例，请调整搜索条件。':'当前项目还没有测试用例。';root.append(empty);}
+ if(!visible.length){const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=7;cell.className='empty-state';cell.textContent=inSuite.length?'没有符合当前筛选条件的用例。':'当前分组没有用例。';row.append(cell);root.append(row);}
 }
 async function loadCatalog(){
- try{const data=await api('/api/catalog?lite=1',{cache:'no-store'});allCases=data.cases||[];
+ try{const data=await api('/api/catalog?lite=1',{cache:'no-store'});allCases=data.cases||[];suites=data.suites||[];packId=data.packs?.[0]?.id||packId;try{for(const [id,result] of JSON.parse(sessionStorage.getItem('testdock.results.'+packId)||'[]'))caseResults.set(id,result);}catch(_){}renderNavigation();readRoute();
  setText('pack-badge',(data.packs||[]).map(p=>p.name).join(' · ')||'未选择项目');
  setText('total-cases',allCases.length);setText('safe-cases',allCases.filter(c=>c.mode!=='live'&&!c.regressionExcluded).length);setText('total-suites',new Set(allCases.map(c=>c.suite)).size);renderCases();showStatus('目录已更新 · '+allCases.length+' 个用例');
  }catch(e){showStatus(e.message,true);}
 }
 async function loadCapabilities(){
- try{const data=await api('/api/platform');packId=data.pack;restoreActiveJob();resourceDefinition=data.resourcePool||{enabled:false};$('nav-resources').hidden=!resourceDefinition.enabled;setText('resource-nav-label',resourceDefinition.title||'项目资源');setText('resource-title',resourceDefinition.title||'项目资源');setText('resource-description',resourceDefinition.description||'');if(!resourceDefinition.enabled)view('cases');}
+ try{const data=await api('/api/platform');packId=data.pack;restoreActiveJob();resourceDefinition=data.resourcePool||{enabled:false};$('nav-resources').hidden=!resourceDefinition.enabled;setText('resource-nav-label',resourceDefinition.title||'项目资源');setText('resource-title',resourceDefinition.title||'项目资源');setText('resource-description',resourceDefinition.description||'');if(!resourceDefinition.enabled&&currentView==='resources')location.hash='/home';}
  catch(e){showStatus('项目能力读取失败：'+e.message,true);}
 }
 async function loadResources(){
@@ -104,25 +139,26 @@ async function watchActiveJob(){
  try{
   const job=await PLATFORMExecution.pollJob(fetch,'/api/execution/job?id='+encodeURIComponent(current.jobId),{onProgress:j=>setText('result-status',j.status)});
   const data=job.result||{ok:null,status:job.status,error:job.error};
-  setText('result-status',data.status==='passed'?'通过':data.executionStatus||data.status||job.status);setText('result',JSON.stringify(data,null,2));showStatus('执行已结束 · '+current.caseId);
-  await fetch.completeRequest?.('/api/run-case',{id:current.caseId,background:true});
+  setText('result-status',data.status==='passed'?'通过':data.executionStatus||data.status||job.status);setText('result',JSON.stringify(data,null,2));renderResult(data);showStatus('执行已结束 · '+current.caseId);
+  await fetch.completeRequest?.(current.batch?'/api/run':'/api/run-case',current.batch?{suite:current.caseId,mode:current.mode||'safe',background:true}:{id:current.caseId,background:true});
   activeRun=null;saveActiveJob();$('job-cancel').hidden=true;
  }catch(error){setText('result-status','查询未完成');setText('result',error.message+' · 任务 '+current.jobId);showStatus(error.message,true);$('job-resume').hidden=false;}
  finally{watching=false;renderCases();}
 }
 async function runCase(item,button){
- if(activeRun||watching)return;button.disabled=true;watching=true;renderCases();setText('result-status','提交中');setText('result','正在提交 '+item.id+'…');
+ if(activeRun||watching)return;if(item.mode==='live'&&!confirm('此用例将写入当前项目测试环境。确认执行 '+item.id+'？'))return;button.disabled=true;watching=true;renderCases();setText('result-status','提交中');setText('result','正在提交 '+item.id+'…');
  try{
   const data=await api('/api/run-case',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,background:true})});
   activeRun={jobId:data.executionId,caseId:item.id};saveActiveJob();watching=false;await watchActiveJob();
  }catch(error){watching=false;setText('result-status','提交结果未确认');setText('result',error.message);showStatus(error.message,true);renderCases();}
 }
+$('only-failed').onclick=()=>{onlyFailed=!onlyFailed;$('only-failed').classList.toggle('on',onlyFailed);renderCases();};
 $('job-resume').addEventListener('click',watchActiveJob);
 $('job-cancel').addEventListener('click',async()=>{
  if(!activeRun)return;$('job-cancel').disabled=true;
  try{const job=await api('/api/execution/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:activeRun.jobId})});setText('result-status',job.status);if(!watching)await watchActiveJob();}
  catch(error){showStatus(error.message,true);}finally{$('job-cancel').disabled=false;}
 });
-$('nav-cases').addEventListener('click',()=>view('cases'));$('nav-resources').addEventListener('click',()=>view('resources'));$('filter').addEventListener('input',renderCases);$('reload').addEventListener('click',()=>{loadCatalog();loadCapabilities();if(currentView==='resources')loadResources();});$('identity-reload').addEventListener('click',loadResources);loadCapabilities();loadCatalog();
+window.addEventListener('hashchange',readRoute);$('nav-cases').addEventListener('click',()=>{location.hash='/cases/';});$('nav-resources').addEventListener('click',()=>{location.hash='/resources';});$('filter').addEventListener('input',renderCases);$('reload').addEventListener('click',()=>{loadCatalog();loadCapabilities();if(currentView==='resources')loadResources();});$('identity-reload').addEventListener('click',loadResources);$('batch-safe').onclick=async()=>{if(activeRun||watching)return;if(!selectedSuite){showStatus('请先选择用例分组',true);return;}try{const data=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({suite:selectedSuite,mode:'safe',background:true})});activeRun={jobId:data.executionId,caseId:selectedSuite,batch:true};saveActiveJob();await watchActiveJob();}catch(error){showStatus(error.message,true);}};$('batch-safe-bar').onclick=()=>$('batch-safe').click();$('batch-live').onclick=async()=>{if(activeRun||watching||!selectedSuite)return;if(!confirm('本组 LIVE 会修改当前项目测试环境。确认执行？'))return;try{const data=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({suite:selectedSuite,mode:'live',background:true})});activeRun={jobId:data.executionId,caseId:selectedSuite,batch:true,mode:'live'};saveActiveJob();await watchActiveJob();}catch(error){showStatus(error.message,true);}};$('rerun-failed').onclick=async()=>{const failed=allCases.filter(c=>(!selectedSuite||c.suite===selectedSuite)&&caseResults.get(c.id)?.ok===false);for(const item of failed){await runCase(item,$('rerun-failed'));if(activeRun)break;}};loadCapabilities();loadCatalog();
 </script>
 </body></html>

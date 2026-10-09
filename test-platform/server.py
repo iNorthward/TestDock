@@ -15,7 +15,7 @@ import logging
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, unquote
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent
@@ -435,6 +435,34 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         p = urlparse(self.path)
         qs = parse_qs(p.query)
+        if p.path == "/api/document":
+            relative = (qs.get("path") or [""])[0]
+            document = (REPO / relative).resolve()
+            roots = [REPO / "docs", REPO / "examples" / "adapter_recipes"]
+            if document.suffix != ".md" or not any(document.is_relative_to(root.resolve()) for root in roots):
+                self._json(403, {"ok": False, "error": "文档路径不允许访问"})
+                return
+            try:
+                self._json(200, {"ok": True, "data": {"content": document.read_text(encoding="utf-8")}})
+            except OSError:
+                self._json(404, {"ok": False, "error": "文档不存在或不可读"})
+            return
+        if p.path == "/whitepaper" or (unquote(p.path).endswith(".md") and p.path.startswith(("/docs/", "/examples/adapter_recipes/"))):
+            b = (ROOT / "document.html").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+            return
+        if p.path == "/api/whitepaper":
+            document = REPO / "docs" / "architecture" / "TEST_PLATFORM_ARCHITECTURE.md"
+            try:
+                self._json(200, {"ok": True, "data": {"content": document.read_text(encoding="utf-8")}})
+            except OSError:
+                self._json(404, {"ok": False, "error": "平台白皮书文件不可读"})
+            return
         if p.path == "/api/platform":
             from resource_pool_config import selected_definition
             from pack_registry import diagnostic_capabilities

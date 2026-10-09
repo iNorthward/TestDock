@@ -59,7 +59,7 @@ def build(destination, *, source=ROOT, pack_ids=()):
         staging = Path(temporary)
         platform = staging / 'platform'
         platform.mkdir()
-        support = ['test-platform/panel.html', 'test-platform/insights.html', 'start.sh', 'stop.sh', 'scripts/load_env.sh', 'scripts/run_nightly.sh',
+        support = ['test-platform/document.html', 'test-platform/panel.html', 'test-platform/insights.html', 'start.sh', 'stop.sh', 'scripts/load_env.sh', 'scripts/run_nightly.sh',
                    'scripts/offline_guard.cjs', 'resources/platform-core-files.json',
                    'requirements.txt', '.nvmrc', '.env.example', 'AGENTS.md', 'README.md', 'tests/test_platform_distribution_runtime.py']
         for relative in dict.fromkeys([*inventory, *support, *_tree_files(source, 'assets'), *_tree_files(source, 'docs/architecture'), *_tree_files(source, 'docs/onboarding'), *_tree_files(source, 'docs/reports/mature-foundation'), *_tree_files(source, 'docs/reports/six-improvements')]):
