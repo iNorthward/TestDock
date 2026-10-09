@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "checks": {
+    "secondClickCreatesDistinctRun": true,
+    "refreshRetainsExecutionId": true,
+    "cancelConfirmedTerminal": true,
+    "historyCompareRendered": true,
+    "browserErrors": 0
+  },
+  "a11y": {
+    "violations": 0,
+    "incomplete": 1,
+    "note": "Gradient backgrounds remain indeterminate to the automated contrast analyzer; not reported as passed."
+  },
+  "temporaryUIRemoved": true,
+  "defaultUIReadOnlyVerified": true
+}

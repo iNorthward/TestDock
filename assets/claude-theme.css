@@ -1,0 +1,5 @@
+/**
+ * Legacy entry — use theme-bundle.css for multi-theme support.
+ * Kept for backward-compatible links in older HTML pages.
+ */
+@import url("theme-bundle.css");

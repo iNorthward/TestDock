@@ -1,0 +1,63 @@
+{
+  "groups": [
+    "distribution",
+    "execution",
+    "execution-ui",
+    "isolation",
+    "onboarding"
+  ],
+  "python": [
+    "test_adapter_recipes",
+    "test_agent_onboarding",
+    "test_background_execution",
+    "test_catalog_import_bootstrap",
+    "test_catalog_run",
+    "test_db_config",
+    "test_env_config_lazy",
+    "test_execution_entrypoints",
+    "test_execution_guard",
+    "test_execution_jobs",
+    "test_execution_provenance",
+    "test_execution_queue",
+    "test_history_compare",
+    "test_insights_actions",
+    "test_isolated_runner",
+    "test_panel_pack_labels",
+    "test_platform_distribution_runtime",
+    "test_platform_export",
+    "test_platform_isolation",
+    "test_platform_launch_isolation",
+    "test_platform_portability",
+    "test_platform_protocol",
+    "test_project_config_isolation",
+    "test_project_handoff",
+    "test_resource_pool_capabilities",
+    "test_run_history",
+    "test_run_history_query_bounds",
+    "test_server_duration_clock",
+    "test_wire_rule_registry"
+  ],
+  "javascript": [
+    "tests/test_execution_client.js",
+    "tests/test_theme_contract.js"
+  ],
+  "unmappedSources": [],
+  "sourceMapping": {},
+  "businessCasesExecuted": 0,
+  "testsRun": 147,
+  "failures": 0,
+  "errors": 0,
+  "ok": true,
+  "blockedConnectionAttempts": 0,
+  "blockedFilesystemAttempts": 0,
+  "nodeExitCode": 0,
+  "nodeTests": 9,
+  "offlineIsolation": {
+    "backend": "macOS-sandbox-exec",
+    "freshProcesses": true,
+    "environmentCleared": true,
+    "temporaryData": true,
+    "descendantGuards": true,
+    "temporaryDataRemoved": true
+  }
+}

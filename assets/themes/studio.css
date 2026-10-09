@@ -1,0 +1,122 @@
+/**
+ * PLATFORM Studio — document workspace: airy light surfaces, soft borders, teal accent.
+ */
+[data-theme="studio"] {
+  color-scheme: light;
+
+  --claude-primary: #0d9488;
+  --claude-primary-active: #0f766e;
+  --claude-primary-disabled: #cce8e4;
+  --claude-ink: #1a1d21;
+  --claude-body: #3f464d;
+  --claude-body-strong: #25282c;
+  --claude-muted: #6b7280;
+  --claude-muted-soft: #9ca3af;
+  --claude-hairline: #e8eaed;
+  --claude-hairline-soft: #f0f1f3;
+  --claude-canvas: #fbfbfc;
+  --claude-surface-soft: #f5f6f8;
+  --claude-surface-card: #ffffff;
+  --claude-surface-cream-strong: #eceef1;
+  --claude-on-primary: #ffffff;
+  --claude-success: #059669;
+  --claude-warning: #ca8a04;
+  --claude-error: #e11d48;
+
+  --acc-rgb: 13, 148, 136;
+  --green-rgb: 5, 150, 105;
+  --red-rgb: 225, 29, 72;
+  --canvas-rgb: 251, 251, 252;
+  --ink-rgb: 26, 29, 33;
+
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  --bg: #fbfbfc;
+  --panel: #f5f6f8;
+  --panel2: #ffffff;
+  --panel3: #eceef1;
+  --line: #e8eaed;
+  --txt: #1a1d21;
+  --mut: #6b7280;
+  --acc: #0d9488;
+  --acc2: #6366f1;
+  --green: #059669;
+  --red: #e11d48;
+  --warn: #ca8a04;
+
+  --surface: #ffffff;
+  --border: #e8eaed;
+  --border-hi: #d8dce2;
+  --ink: #1a1d21;
+  --ink-2: #25282c;
+  --ink-3: #6b7280;
+  --ink-4: #9ca3af;
+
+  --col-todo: #9ca3af;
+  --col-inprogress: #0d9488;
+  --col-review: #8b5cf6;
+  --col-done: #059669;
+  --col-blocked: #e11d48;
+  --role-pm: #b45309;
+  --role-product: #0d9488;
+  --role-architect: #6366f1;
+  --role-tester: #8b5cf6;
+
+  --topbar-bg: #ffffff;
+  --topbar-fg: #1a1d21;
+  --topbar-fg-muted: #6b7280;
+  --topbar-border: #e8eaed;
+  --topbar-hover-bg: #f5f6f8;
+  --workspace-bar-bg: rgba(var(--canvas-rgb), 0.94);
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius: var(--radius-md);
+
+  --series-r-bg: rgba(107, 114, 128, 0.12);
+  --series-r-fg: #6b7280;
+  --series-r-border: rgba(107, 114, 128, 0.24);
+  --series-f-bg: rgba(99, 102, 241, 0.1);
+  --series-f-fg: #6366f1;
+  --series-f-border: rgba(99, 102, 241, 0.24);
+  --series-d-bg: rgba(13, 148, 136, 0.1);
+  --series-d-fg: #0d9488;
+  --series-d-border: rgba(13, 148, 136, 0.24);
+  --series-e-bg: rgba(202, 138, 4, 0.1);
+  --series-e-fg: #b45309;
+  --series-e-border: rgba(202, 138, 4, 0.24);
+  --series-live-bg: rgba(225, 29, 72, 0.1);
+  --series-live-fg: #e11d48;
+  --series-live-border: rgba(225, 29, 72, 0.24);
+
+  --status-ok-bg: rgba(5, 150, 105, 0.1);
+  --status-ok-fg: #059669;
+  --status-ok-border: rgba(5, 150, 105, 0.24);
+  --status-no-bg: rgba(225, 29, 72, 0.1);
+  --status-no-fg: #e11d48;
+  --status-no-border: rgba(225, 29, 72, 0.24);
+  --status-mix-bg: rgba(202, 138, 4, 0.1);
+  --status-mix-fg: #b45309;
+  --status-mix-border: rgba(202, 138, 4, 0.24);
+
+  --code-inline-bg: rgba(var(--acc-rgb), 0.08);
+  --code-inline-fg: #0f766e;
+  --theme-swatch: linear-gradient(135deg, #fbfbfc 50%, #0d9488 50%);
+}
+
+[data-theme="studio"] h1,
+[data-theme="studio"] h2,
+[data-theme="studio"] .display-title {
+  font-family: var(--font-body);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+[data-theme="studio"] .brand-mark__title {
+  font-family: var(--font-body);
+  font-weight: 600;
+}

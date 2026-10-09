@@ -1,0 +1,90 @@
+/**
+ * Cursor theme — warm cream editorial canvas, Cursor Orange accent.
+ * Derived from cursor/DESIGN.md (getdesign.md analysis).
+ */
+[data-theme="cursor"] {
+  color-scheme: light;
+
+  --claude-primary: #f54e00;
+  --claude-primary-active: #d04200;
+  --claude-primary-disabled: #f0ddd4;
+  --claude-ink: #26251e;
+  --claude-body: #5a5852;
+  --claude-body-strong: #26251e;
+  --claude-muted: #807d72;
+  --claude-muted-soft: #a09c92;
+  --claude-hairline: #e6e5e0;
+  --claude-hairline-soft: #efeee8;
+  --claude-canvas: #f7f7f4;
+  --claude-surface-soft: #fafaf7;
+  --claude-surface-card: #ffffff;
+  --claude-surface-cream-strong: #e6e5e0;
+  --claude-on-primary: #ffffff;
+  --claude-accent-teal: #1f8a65;
+  --claude-success: #1f8a65;
+  --claude-warning: #c08532;
+  --claude-error: #cf2d56;
+
+  --acc-rgb: 245, 78, 0;
+  --green-rgb: 31, 138, 101;
+  --red-rgb: 207, 45, 86;
+  --canvas-rgb: 247, 247, 244;
+  --ink-rgb: 38, 37, 30;
+
+  --primary-active: #d04200;
+  --on-primary: #ffffff;
+
+  /* CursorGothic substitute per DESIGN.md */
+  --font-display: "Inter", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, Menlo, monospace;
+
+  --bg: #f7f7f4;
+  --panel: #fafaf7;
+  --panel2: #ffffff;
+  --panel3: #e6e5e0;
+  --line: #e6e5e0;
+  --txt: #26251e;
+  --mut: #807d72;
+  --acc: #f54e00;
+  --acc2: #1f8a65;
+  --green: #1f8a65;
+  --red: #cf2d56;
+  --warn: #c08532;
+
+  --code-inline-bg: rgba(var(--ink-rgb), 0.06);
+  --code-inline-fg: var(--txt);
+  --pop-bg: #ffffff;
+  --pop-hd-bg: #efeee8;
+  --pop-hd-fg: #807d72;
+  --pop-border: #cfcdc4;
+  --pop-code-fg: #26251e;
+  --pop-hover-bg: #fafaf7;
+
+  --surface: #ffffff;
+  --border: #e6e5e0;
+  --border-hi: #cfcdc4;
+  --ink: #26251e;
+  --ink-2: #26251e;
+  --ink-3: #807d72;
+  --ink-4: #a09c92;
+  --col-todo: #807d72;
+  --col-inprogress: #f54e00;
+  --col-review: #c0a8dd;
+  --col-done: #1f8a65;
+  --col-blocked: #cf2d56;
+  --role-pm: #c08532;
+  --role-product: #f54e00;
+  --role-architect: #1f8a65;
+  --role-tester: #c0a8dd;
+
+  --topbar-bg: var(--claude-canvas);
+  --topbar-fg: var(--claude-ink);
+  --topbar-fg-muted: var(--claude-muted);
+  --topbar-border: var(--claude-hairline);
+  --topbar-hover-bg: var(--claude-hairline-soft);
+  --workspace-bar-bg: rgba(var(--canvas-rgb), 0.94);
+
+  --code-inline-bg: rgba(var(--ink-rgb), 0.06);
+  --theme-swatch: linear-gradient(135deg, #f7f7f4 50%, #f54e00 50%);
+}

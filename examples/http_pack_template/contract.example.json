@@ -1,0 +1,7 @@
+{
+  "method":"GET", "path":"/ready", "base_env":"SERVICE_API_BASE",
+  "headers":{"Authorization":{"env":"SERVICE_ACCESS_TOKEN","prefix":"Bearer "}},
+  "expected_status":200,
+  "checks":[{"path":["result","alive"],"type":"boolean","equals":true}],
+  "mock_response":{"status":200,"body":{"result":{"alive":true}}}
+}

@@ -1,0 +1,63 @@
+{
+  "scope": "real_readonly",
+  "realBusinessVerified": true,
+  "doctorReady": true,
+  "historyCompareVerified": true,
+  "temporaryDataRemoved": true,
+  "baselineFilesUnchanged": true,
+  "sourceGitUnchanged": true,
+  "ownedProcessStopped": true,
+  "sourceFilesChecked": 9,
+  "ok": true,
+  "verifiedRoles": 3,
+  "realReadOnlyCases": 5,
+  "totalRealGetRequests": 10,
+  "totalAuthenticationRequests": 9,
+  "initialContractMismatch": {
+    "observed": true,
+    "cause": "Temporary Pack expected standard HTTP denial codes, while the project explicitly declares a different business rejection code. Source evidence was checked and the owned Pack assertion was corrected; no Core fallback was added."
+  },
+  "cases": [
+    {
+      "id": "REAL-R01",
+      "status": "passed",
+      "jobStatus": "done",
+      "isolated": true,
+      "retryDeduplicated": true
+    },
+    {
+      "id": "REAL-R02",
+      "status": "passed",
+      "jobStatus": "done",
+      "isolated": true,
+      "retryDeduplicated": true
+    },
+    {
+      "id": "REAL-R03",
+      "status": "passed",
+      "jobStatus": "done",
+      "isolated": true,
+      "retryDeduplicated": true
+    },
+    {
+      "id": "REAL-E01",
+      "status": "passed",
+      "jobStatus": "done",
+      "isolated": true,
+      "retryDeduplicated": true
+    },
+    {
+      "id": "REAL-E02",
+      "status": "passed",
+      "jobStatus": "done",
+      "isolated": true,
+      "retryDeduplicated": true
+    }
+  ],
+  "remoteSideEffects": "OAuth authentication may retain sessions and audit records according to service policy; no business mutation requested.",
+  "limitations": [
+    "Limited read-only sample; no reliability percentage extrapolation",
+    "No real business writes, database reconciliation, production calls or full case execution",
+    "Remote authentication sessions and audit records follow service retention; no revocation endpoint was inferred"
+  ]
+}

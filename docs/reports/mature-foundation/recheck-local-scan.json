@@ -1,0 +1,7 @@
+{
+  "ok": true,
+  "filesScannedIncludingHiddenAndBinary": 215,
+  "findings": [],
+  "scope": "all local files, including IDE, runtime and binary; user-selected new platform directory name is retained; no content values emitted",
+  "gitMetadataPresent": false
+}

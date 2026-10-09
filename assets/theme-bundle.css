@@ -1,0 +1,15 @@
+/**
+ * PLATFORM UI theme bundle — shared base + all theme token files.
+ * Switch themes via data-theme on <html> (see theme-switcher.js).
+ *
+ * Fonts are self-hosted under fonts/ (offline-friendly, no Google CDN).
+ */
+@import url("fonts/platform-fonts.css");
+@import url("themes/console.css");
+@import url("themes/studio.css");
+@import url("themes/night.css");
+@import url("themes/claude.css");
+@import url("themes/cursor.css");
+@import url("themes/meta.css");
+@import url("themes/nike.css");
+@import url("themes/base.css");

@@ -1,0 +1,45 @@
+{
+  "groups": [
+    "distribution",
+    "gate",
+    "isolation",
+    "onboarding"
+  ],
+  "python": [
+    "test_agent_onboarding",
+    "test_catalog_import_bootstrap",
+    "test_db_config",
+    "test_env_config_lazy",
+    "test_offline_regression_isolation",
+    "test_platform_distribution_runtime",
+    "test_platform_export",
+    "test_platform_isolation",
+    "test_platform_launch_isolation",
+    "test_platform_portability",
+    "test_project_config_isolation",
+    "test_resource_pool_capabilities",
+    "test_sync_agent_rules",
+    "test_targeted_regression",
+    "test_wire_rule_registry"
+  ],
+  "javascript": [],
+  "unmappedSources": [],
+  "sourceMapping": {},
+  "businessCasesExecuted": 0,
+  "testsRun": 83,
+  "failures": 0,
+  "errors": 0,
+  "ok": true,
+  "blockedConnectionAttempts": 0,
+  "blockedFilesystemAttempts": 0,
+  "nodeExitCode": null,
+  "nodeTests": 0,
+  "offlineIsolation": {
+    "backend": "macOS-sandbox-exec",
+    "freshProcesses": true,
+    "environmentCleared": true,
+    "temporaryData": true,
+    "descendantGuards": true,
+    "temporaryDataRemoved": true
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "groups": [
+    "distribution"
+  ],
+  "python": [
+    "test_platform_distribution_runtime",
+    "test_platform_export",
+    "test_wire_rule_registry"
+  ],
+  "javascript": [],
+  "unmappedSources": [],
+  "sourceMapping": {},
+  "businessCasesExecuted": 0,
+  "testsRun": 9,
+  "failures": 0,
+  "errors": 0,
+  "ok": true,
+  "blockedConnectionAttempts": 0,
+  "blockedFilesystemAttempts": 0,
+  "nodeExitCode": null,
+  "nodeTests": 0,
+  "offlineIsolation": {
+    "backend": "macOS-sandbox-exec",
+    "freshProcesses": true,
+    "environmentCleared": true,
+    "temporaryData": true,
+    "descendantGuards": true,
+    "temporaryDataRemoved": true
+  }
+}

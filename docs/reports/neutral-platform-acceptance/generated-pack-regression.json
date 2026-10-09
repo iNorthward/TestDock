@@ -1,0 +1,28 @@
+{
+  "groups": [
+    "device_project.adapter"
+  ],
+  "python": [
+    "packs.device_project.tests.test_adapter"
+  ],
+  "javascript": [],
+  "unmappedSources": [],
+  "sourceMapping": {},
+  "businessCasesExecuted": 0,
+  "testsRun": 2,
+  "failures": 0,
+  "errors": 0,
+  "ok": true,
+  "blockedConnectionAttempts": 0,
+  "blockedFilesystemAttempts": 0,
+  "nodeExitCode": null,
+  "nodeTests": 0,
+  "offlineIsolation": {
+    "backend": "macOS-sandbox-exec",
+    "freshProcesses": true,
+    "environmentCleared": true,
+    "temporaryData": true,
+    "descendantGuards": true,
+    "temporaryDataRemoved": true
+  }
+}

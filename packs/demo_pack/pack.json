@@ -1,0 +1,33 @@
+{
+  "id": "demo_pack",
+  "display_name": "demo",
+  "default": true,
+  "identity_pool_file": "data/identity_pool.json",
+  "identity_requirements": {},
+  "case_dirs": [
+    "examples/demo_pack"
+  ],
+  "module_order_hint": [
+    "readonly_cases"
+  ],
+  "navigation": [
+    {
+      "id": "demo",
+      "name": "Demo",
+      "parents": [
+        "demo"
+      ]
+    }
+  ],
+  "bootstrap": "examples.demo_pack:install",
+  "resource_pool": {
+    "enabled": false
+  },
+  "platform_api": {
+    "min": "1.0",
+    "max_exclusive": "2.0",
+    "features": [
+      "request_id"
+    ]
+  }
+}

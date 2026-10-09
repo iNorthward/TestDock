@@ -1,0 +1,273 @@
+{
+  "version": 1,
+  "groups": {
+    "execution": {
+      "sources": [
+        "test-platform/execution_*.py",
+        "test-platform/catalog.py",
+        "test-platform/server.py",
+        "test-platform/run_history.py",
+        "test-platform/history_compare.py",
+        "scripts/isolated_case_worker.py",
+        "test-platform/isolated_runner.py"
+      ],
+      "python": [
+        "test_execution_guard",
+        "test_execution_jobs",
+        "test_execution_entrypoints",
+        "test_execution_provenance",
+        "test_catalog_run",
+        "test_server_duration_clock",
+        "test_run_history",
+        "test_run_history_query_bounds",
+        "test_catalog_import_bootstrap",
+        "test_insights_actions",
+        "test_background_execution",
+        "test_history_compare",
+        "test_execution_queue",
+        "test_isolated_runner"
+      ],
+      "javascript": []
+    },
+    "isolation": {
+      "sources": [
+        "test-platform/pack_registry.py",
+        "test-platform/project_paths.py",
+        "platform_config.py",
+        "timezone_config.py",
+        "resources/platform-core-files.json",
+        "scripts/check_platform_isolation.py",
+        "scripts/platform_launch_config.py",
+        "start.sh",
+        "packs/*/pack.json",
+        "test-platform/resource_pool_config.py",
+        "scripts/check_env.py",
+        "scripts/load_env.sh",
+        "stop.sh",
+        "platform_protocol.py"
+      ],
+      "python": [
+        "test_platform_isolation",
+        "test_project_config_isolation",
+        "test_platform_launch_isolation",
+        "test_catalog_import_bootstrap",
+        "test_env_config_lazy",
+        "test_db_config",
+        "test_platform_portability",
+        "test_resource_pool_capabilities",
+        "test_platform_protocol"
+      ],
+      "javascript": []
+    },
+    "transport": {
+      "sources": [
+        "test-platform/common/api_client.py",
+        "test-platform/common/api_response.py",
+        "test-platform/common/response_envelope.py",
+        "test-platform/common/security_helpers.py",
+        "test-platform/common/env_config.py",
+        "test-platform/common/db_conn.py"
+      ],
+      "python": [
+        "test_env_config_lazy",
+        "test_db_config",
+        "test_case_result_status"
+      ],
+      "javascript": []
+    },
+    "identity": {
+      "sources": [
+        "test-platform/identity_pool*.py",
+        "tests/identity_fixtures.py"
+      ],
+      "python": [
+        "test_identity_pool_audit",
+        "test_resource_pool_capabilities"
+      ],
+      "javascript": []
+    },
+    "serialization": {
+      "sources": [
+        "test-platform/common/json_wire_types.py",
+        "test-platform/common/money_cmp.py",
+        "test-platform/common/db_reconcile_helpers.py",
+        "resources/json-wire-*.json",
+        "scripts/sync_json_wire_types.py",
+        "scripts/output_transaction.py"
+      ],
+      "python": [
+        "test_money_cmp",
+        "test_db_reconcile_helpers"
+      ],
+      "javascript": []
+    },
+    "gate": {
+      "sources": [
+        "scripts/targeted_regression.py",
+        "resources/targeted-regression.json",
+        "packs/*/regression.json",
+        "check.sh",
+        "scripts/install-git-hooks.sh",
+        "scripts/check_case_doc_sync.py",
+        "scripts/sync_agent_rules.py",
+        "agent-rules/*.md",
+        ".cursor/rules/*",
+        ".claude/rules/*",
+        "scripts/offline_*.py",
+        "scripts/offline_guard.cjs"
+      ],
+      "python": [
+        "test_targeted_regression",
+        "test_sync_agent_rules",
+        "test_offline_regression_isolation"
+      ],
+      "javascript": []
+    },
+    "execution-ui": {
+      "sources": [
+        "assets/execution-client.js",
+        "test-platform/panel.html",
+        "assets/theme-boot.js",
+        "assets/theme-switcher.js",
+        "test-platform/insights.html",
+        "assets/themes/*.css"
+      ],
+      "python": [
+        "test_panel_pack_labels"
+      ],
+      "javascript": [
+        "tests/test_execution_client.js",
+        "tests/test_theme_contract.js"
+      ]
+    },
+    "catalog-tools": {
+      "sources": [
+        "scripts/validate_catalog.py",
+        "scripts/gen_apifox_coverage_wiki.py",
+        "scripts/run_apifox_inspection.py",
+        "scripts/migrate_api_entrypoints.py",
+        "scripts/nightly_regression.py",
+        "packs/*/data-cache/coverage.json",
+        "scripts/check_e_coverage_gap.py",
+        "scripts/sync_log_error_codes.py",
+        "test-platform/common/db_sample.py",
+        "scripts/run_nightly.sh"
+      ],
+      "python": [
+        "test_nightly_regression",
+        "test_inspection_quality",
+        "test_apifox_coverage_input_validation",
+        "test_sync_apifox_integrated",
+        "test_check_e_coverage_gap"
+      ],
+      "javascript": []
+    },
+    "candidates": {
+      "sources": [
+        "scripts/openapi_contract.py",
+        "scripts/candidate_inputs.py",
+        "scripts/project_inputs.py",
+        "scripts/gen_[defr]_series_candidates.py"
+      ],
+      "python": [
+        "test_openapi_candidate_rules",
+        "test_candidate_input_validation",
+        "test_r_candidate_response_shapes"
+      ],
+      "javascript": []
+    },
+    "response-data": {
+      "sources": [
+        "test-platform/common/response_base_rules.py",
+        "test-platform/common/page_filter_helpers.py"
+      ],
+      "python": [
+        "test_platform_distribution_runtime"
+      ],
+      "javascript": []
+    },
+    "schema-impact": {
+      "sources": [
+        "scripts/db_schema_impact_audit.py",
+        "scripts/report_hand_section.py",
+        "scripts/sync_db_schema.py"
+      ],
+      "python": [
+        "test_schema_impact_pack_scope",
+        "test_schema_cache_validation"
+      ],
+      "javascript": []
+    },
+    "contract-tools": {
+      "sources": [
+        "scripts/apifox_contract_audit.py",
+        "scripts/gen_interface_profile.py",
+        "scripts/fetch_apifox_oas.py"
+      ],
+      "python": [
+        "test_contract_tools_pack_scope",
+        "test_interface_profile_operation_selection",
+        "test_apifox_oas_audit_input",
+        "test_apifox_baseline_report_state"
+      ],
+      "javascript": []
+    },
+    "pack-tools": {
+      "sources": [
+        "scripts/*identity_pool*.py",
+        "scripts/*track_event*.py",
+        "scripts/*orphan*.py",
+        "scripts/error_log_audit.py",
+        "scripts/sync_json_wire_types.py",
+        "scripts/migrate_api_entrypoints.py",
+        "scripts/validate_schema_refs.py",
+        "scripts/gen_kb_report_indexes.py"
+      ],
+      "python": [
+        "test_platform_isolation",
+        "test_schema_impact_pack_scope"
+      ],
+      "javascript": []
+    },
+    "distribution": {
+      "sources": [
+        "scripts/export_platform.py",
+        "examples/demo_pack/panel.html"
+      ],
+      "python": [
+        "test_platform_export",
+        "test_platform_distribution_runtime",
+        "test_wire_rule_registry"
+      ],
+      "javascript": []
+    },
+    "onboarding": {
+      "sources": [
+        "scripts/create_project_pack.py",
+        "scripts/verify_project_pack.py",
+        "scripts/check_neutral_distribution.py",
+        "examples/http_pack_template/*",
+        "scripts/accept_project_integration.py",
+        "scripts/project_doctor.py",
+        "scripts/project_tasks.py",
+        "examples/adapter_recipes/*"
+      ],
+      "python": [
+        "test_agent_onboarding",
+        "test_project_handoff",
+        "test_adapter_recipes"
+      ],
+      "javascript": []
+    }
+  },
+  "required_sources": [
+    "resources/*.json",
+    "resources/*.yaml",
+    "resources/*.yml",
+    "resources/*.toml",
+    "resources/*.xml",
+    "resources/*.sql",
+    "packs/*/*.json",
+    "packs/*/**/*.json"
+  ]
+}

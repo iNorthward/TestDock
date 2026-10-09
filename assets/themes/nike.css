@@ -1,0 +1,89 @@
+/**
+ * Nike theme — monochrome athletic retail, massive uppercase display, black CTAs.
+ * Derived from nike/DESIGN.md (getdesign.md analysis).
+ */
+[data-theme="nike"] {
+  color-scheme: light;
+
+  --claude-primary: #111111;
+  --claude-primary-active: #39393b;
+  --claude-primary-disabled: #cacacb;
+  --claude-ink: #111111;
+  --claude-body: #39393b;
+  --claude-body-strong: #111111;
+  --claude-muted: #707072;
+  --claude-muted-soft: #9e9ea0;
+  --claude-hairline: #cacacb;
+  --claude-hairline-soft: #e5e5e5;
+  --claude-canvas: #ffffff;
+  --claude-surface-soft: #f5f5f5;
+  --claude-surface-card: #ffffff;
+  --claude-surface-cream-strong: #e5e5e5;
+  --claude-on-primary: #ffffff;
+
+  --acc-rgb: 17, 17, 17;
+  --green-rgb: 0, 125, 72;
+  --red-rgb: 211, 0, 5;
+  --canvas-rgb: 255, 255, 255;
+  --ink-rgb: 17, 17, 17;
+
+  --font-display: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "Helvetica Neue", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  --bg: #ffffff;
+  --panel: #f5f5f5;
+  --panel2: #ffffff;
+  --panel3: #e5e5e5;
+  --line: #cacacb;
+  --txt: #111111;
+  --mut: #707072;
+  --acc: #111111;
+  --acc2: #007d48;
+  --green: #007d48;
+  --red: #d30005;
+  --warn: #ed1aa0;
+
+  --surface: #ffffff;
+  --border: #cacacb;
+  --border-hi: #e5e5e5;
+  --ink: #111111;
+  --ink-2: #39393b;
+  --ink-3: #707072;
+  --ink-4: #9e9ea0;
+
+  --col-todo: #9e9ea0;
+  --col-inprogress: #111111;
+  --col-review: #beaffd;
+  --col-done: #007d48;
+  --col-blocked: #d30005;
+  --role-pm: #39393b;
+  --role-product: #111111;
+  --role-architect: #0a7281;
+  --role-tester: #ed1aa0;
+
+  --topbar-bg: #111111;
+  --topbar-fg: #ffffff;
+  --topbar-fg-muted: #9e9ea0;
+  --topbar-border: #39393b;
+  --topbar-hover-bg: #39393b;
+  --workspace-bar-bg: rgba(var(--canvas-rgb), 0.94);
+
+  --radius-sm: 18px;
+  --radius-md: 24px;
+  --radius-lg: 30px;
+  --radius-xl: 30px;
+  --radius-pill: 9999px;
+  --radius: var(--radius-sm);
+
+  --code-inline-bg: rgba(var(--ink-rgb), 0.06);
+  --theme-swatch: linear-gradient(135deg, #ffffff 50%, #111111 50%);
+}
+
+[data-theme="nike"] h1,
+[data-theme="nike"] h2,
+[data-theme="nike"] .display-title {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}

@@ -1,0 +1,111 @@
+/**
+ * Claude theme — warm cream canvas, terracotta accent, editorial typography.
+ * Derived from DESIGN.md (Claude design analysis).
+ */
+[data-theme="claude"] {
+  color-scheme: light;
+
+  --claude-primary: #914a32;
+  --claude-primary-active: #a9583e;
+  --claude-primary-disabled: #e6dfd8;
+  --claude-ink: #141413;
+  --claude-body: #3d3d3a;
+  --claude-body-strong: #252523;
+  --claude-muted: #65635e;
+  --claude-muted-soft: #8e8b82;
+  --claude-hairline: #e6dfd8;
+  --claude-hairline-soft: #ebe6df;
+  --claude-canvas: #faf9f5;
+  --claude-surface-soft: #f5f0e8;
+  --claude-surface-card: #efe9de;
+  --claude-surface-cream-strong: #e8e0d2;
+  --claude-surface-dark: #181715;
+  --claude-surface-dark-elevated: #252320;
+  --claude-surface-dark-soft: #1f1e1b;
+  --claude-on-primary: #ffffff;
+  --claude-on-dark: #faf9f5;
+  --claude-on-dark-soft: #a09d96;
+  --claude-accent-teal: #5db8a6;
+  --claude-accent-amber: #e8a55a;
+  --claude-success: #28723c;
+  --claude-warning: #76540c;
+  --claude-error: #c64545;
+
+  --acc-rgb: 145, 74, 50;
+  --green-rgb: 40, 114, 60;
+  --red-rgb: 198, 69, 69;
+  --canvas-rgb: 250, 249, 245;
+  --ink-rgb: 20, 20, 19;
+
+  --font-display: "Cormorant Garamond", "Tiempos Headline", Georgia, serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  --bg: var(--claude-canvas);
+  --panel: var(--claude-surface-soft);
+  --panel2: var(--claude-surface-card);
+  --panel3: var(--claude-surface-cream-strong);
+  --line: var(--claude-hairline);
+  --txt: var(--claude-ink);
+  --mut: var(--claude-muted);
+  --acc: var(--claude-primary);
+  --acc2: var(--claude-accent-teal);
+  --green: var(--claude-success);
+  --red: var(--claude-error);
+  --warn: var(--claude-warning);
+
+  --surface: #ffffff;
+  --border: var(--claude-hairline);
+  --border-hi: var(--claude-surface-cream-strong);
+  --ink: var(--claude-ink);
+  --ink-2: var(--claude-body-strong);
+  --ink-3: var(--claude-muted);
+  --ink-4: var(--claude-muted-soft);
+
+  --col-todo: var(--claude-muted);
+  --col-inprogress: var(--claude-primary);
+  --col-review: #9a6bb5;
+  --col-done: var(--claude-success);
+  --col-blocked: var(--claude-error);
+  --role-pm: #8b5a3c;
+  --role-product: #a9583e;
+  --role-architect: #4a7c6f;
+  --role-tester: #7a5c8a;
+
+  --topbar-bg: var(--claude-surface-dark);
+  --topbar-fg: var(--claude-on-dark);
+  --topbar-fg-muted: var(--claude-on-dark-soft);
+  --topbar-border: var(--claude-surface-dark-elevated);
+  --topbar-hover-bg: var(--claude-surface-dark-elevated);
+  --workspace-bar-bg: rgba(var(--canvas-rgb), 0.94);
+
+  --code-inline-bg: rgba(var(--acc-rgb), 0.1);
+  --code-inline-fg: var(--acc);
+  --theme-swatch: linear-gradient(135deg, #faf9f5 50%, #cc785c 50%);
+
+  --series-r-bg: rgba(120, 140, 170, 0.16);
+  --series-r-fg: #7a8aa5;
+  --series-r-border: rgba(120, 140, 170, 0.3);
+  --series-f-bg: rgba(93, 150, 220, 0.16);
+  --series-f-fg: #5d96dc;
+  --series-f-border: rgba(93, 150, 220, 0.3);
+  --series-d-bg: rgba(120, 180, 120, 0.16);
+  --series-d-fg: #5db872;
+  --series-d-border: rgba(120, 180, 120, 0.3);
+  --series-e-bg: rgba(220, 150, 70, 0.16);
+  --series-e-fg: #d3963e;
+  --series-e-border: rgba(220, 150, 70, 0.3);
+  --series-live-bg: rgba(198, 90, 90, 0.16);
+  --series-live-fg: #c85a5a;
+  --series-live-border: rgba(198, 90, 90, 0.32);
+
+  --status-ok-bg: rgba(93, 184, 114, 0.14);
+  --status-ok-fg: #5db872;
+  --status-ok-border: rgba(93, 184, 114, 0.3);
+  --status-no-bg: rgba(198, 69, 69, 0.14);
+  --status-no-fg: #c64545;
+  --status-no-border: rgba(198, 69, 69, 0.3);
+  --status-mix-bg: rgba(212, 160, 23, 0.14);
+  --status-mix-fg: #76540c;
+  --status-mix-border: rgba(212, 160, 23, 0.3);
+}

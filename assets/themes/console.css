@@ -1,0 +1,122 @@
+/**
+ * PLATFORM Console — engineering dashboard: cool neutrals, dark chrome, zinc accent.
+ */
+[data-theme="console"] {
+  color-scheme: light;
+
+  --claude-primary: #52525b;
+  --claude-primary-active: #3f3f46;
+  --claude-primary-disabled: #d4d4d8;
+  --claude-ink: #18181b;
+  --claude-body: #3f3f46;
+  --claude-body-strong: #27272a;
+  --claude-muted: #71717a;
+  --claude-muted-soft: #a1a1aa;
+  --claude-hairline: #e4e4e7;
+  --claude-hairline-soft: #f4f4f5;
+  --claude-canvas: #f4f4f5;
+  --claude-surface-soft: #ececef;
+  --claude-surface-card: #ffffff;
+  --claude-surface-cream-strong: #e4e4e7;
+  --claude-on-primary: #ffffff;
+  --claude-success: #16a34a;
+  --claude-warning: #ca8a04;
+  --claude-error: #dc2626;
+
+  --acc-rgb: 82, 82, 91;
+  --green-rgb: 22, 163, 74;
+  --red-rgb: 220, 38, 38;
+  --canvas-rgb: 244, 244, 245;
+  --ink-rgb: 24, 24, 27;
+
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  --bg: #f4f4f5;
+  --panel: #ececef;
+  --panel2: #ffffff;
+  --panel3: #e4e4e7;
+  --line: #e4e4e7;
+  --txt: #18181b;
+  --mut: #71717a;
+  --acc: #52525b;
+  --acc2: #16a34a;
+  --green: #16a34a;
+  --red: #dc2626;
+  --warn: #ca8a04;
+
+  --surface: #ffffff;
+  --border: #e4e4e7;
+  --border-hi: #d4d4d8;
+  --ink: #18181b;
+  --ink-2: #27272a;
+  --ink-3: #71717a;
+  --ink-4: #a1a1aa;
+
+  --col-todo: #a1a1aa;
+  --col-inprogress: #52525b;
+  --col-review: #7c6b9a;
+  --col-done: #16a34a;
+  --col-blocked: #dc2626;
+  --role-pm: #b45309;
+  --role-product: #52525b;
+  --role-architect: #16a34a;
+  --role-tester: #7c6b9a;
+
+  --topbar-bg: #18181b;
+  --topbar-fg: #fafafa;
+  --topbar-fg-muted: #a1a1aa;
+  --topbar-border: #27272a;
+  --topbar-hover-bg: #27272a;
+  --workspace-bar-bg: rgba(var(--canvas-rgb), 0.92);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius: var(--radius-sm);
+
+  --series-r-bg: rgba(113, 113, 122, 0.14);
+  --series-r-fg: #71717a;
+  --series-r-border: rgba(113, 113, 122, 0.28);
+  --series-f-bg: rgba(82, 82, 91, 0.12);
+  --series-f-fg: #52525b;
+  --series-f-border: rgba(82, 82, 91, 0.28);
+  --series-d-bg: rgba(22, 163, 74, 0.1);
+  --series-d-fg: #16a34a;
+  --series-d-border: rgba(22, 163, 74, 0.24);
+  --series-e-bg: rgba(202, 138, 4, 0.1);
+  --series-e-fg: #b45309;
+  --series-e-border: rgba(202, 138, 4, 0.24);
+  --series-live-bg: rgba(220, 38, 38, 0.1);
+  --series-live-fg: #dc2626;
+  --series-live-border: rgba(220, 38, 38, 0.24);
+
+  --status-ok-bg: rgba(22, 163, 74, 0.1);
+  --status-ok-fg: #16a34a;
+  --status-ok-border: rgba(22, 163, 74, 0.24);
+  --status-no-bg: rgba(220, 38, 38, 0.1);
+  --status-no-fg: #dc2626;
+  --status-no-border: rgba(220, 38, 38, 0.24);
+  --status-mix-bg: rgba(202, 138, 4, 0.1);
+  --status-mix-fg: #b45309;
+  --status-mix-border: rgba(202, 138, 4, 0.24);
+
+  --code-inline-bg: rgba(var(--ink-rgb), 0.06);
+  --code-inline-fg: #3f3f46;
+  --theme-swatch: linear-gradient(135deg, #f4f4f5 50%, #52525b 50%);
+}
+
+[data-theme="console"] h1,
+[data-theme="console"] h2,
+[data-theme="console"] .display-title {
+  font-family: var(--font-body);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+[data-theme="console"] .brand-mark__title {
+  font-family: var(--font-body);
+  font-weight: 600;
+}

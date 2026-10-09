@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "core_files": 77,
+  "packs": [
+    {
+      "id": "demo_pack",
+      "case_modules": 1
+    }
+  ],
+  "findings": [],
+  "common_files": 16,
+  "scope": "声明的 Core 源码、Pack manifest 与资源归属；不执行业务案例"
+}

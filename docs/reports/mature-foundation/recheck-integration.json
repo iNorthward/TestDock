@@ -1,0 +1,59 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "name": "clean standalone release",
+      "passed": true
+    },
+    {
+      "name": "two projects start independently",
+      "passed": true
+    },
+    {
+      "name": "optional capabilities disabled",
+      "passed": true
+    },
+    {
+      "name": "HTTP project catalog isolated",
+      "passed": true
+    },
+    {
+      "name": "real HTTP transport with declared authentication",
+      "passed": true
+    },
+    {
+      "name": "declared HTTP contract is fingerprinted",
+      "passed": true
+    },
+    {
+      "name": "request retry does not replay business operation",
+      "passed": true
+    },
+    {
+      "name": "wrong raw JSON type fails",
+      "passed": true
+    },
+    {
+      "name": "second project remains usable",
+      "passed": true
+    },
+    {
+      "name": "separate runtime histories",
+      "passed": true
+    },
+    {
+      "name": "authentication rejection fails instead of passing",
+      "passed": true
+    },
+    {
+      "name": "missing credentials are incomplete before HTTP",
+      "passed": true
+    },
+    {
+      "name": "owned services stopped and temporary data removed",
+      "passed": true
+    }
+  ],
+  "scope": "owned loopback mock business and standalone temporary platform only",
+  "realBusinessCasesExecuted": 0
+}
