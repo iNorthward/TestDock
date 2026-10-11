@@ -1,0 +1,36 @@
+{
+  "groups": [
+    "db-pool",
+    "transport"
+  ],
+  "python": [
+    "test_audit_fixes",
+    "test_case_result_status",
+    "test_db_config",
+    "test_db_pool",
+    "test_env_config_lazy",
+    "test_recheck_fixes"
+  ],
+  "javascript": [],
+  "unmappedSources": [],
+  "sourceMapping": {},
+  "businessCasesExecuted": 0,
+  "testsRun": 66,
+  "failures": 0,
+  "errors": 0,
+  "ok": true,
+  "blockedConnectionAttempts": 0,
+  "blockedFilesystemAttempts": 0,
+  "nodeExitCode": null,
+  "nodeTests": 0,
+  "offlineIsolation": {
+    "backend": "macOS-sandbox-exec",
+    "freshProcesses": true,
+    "environmentCleared": true,
+    "temporaryData": true,
+    "descendantGuards": true,
+    "temporaryDataRemoved": true
+  },
+  "skipped": 5,
+  "skipReason": "离线上下文跳过既有真实回环 HTTP 测试"
+}

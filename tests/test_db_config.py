@@ -61,6 +61,7 @@ class DatabaseConfigTests(unittest.TestCase):
                 "",
             )
 
+    @unittest.skipUnless(db_conn.pymysql, "optional pymysql is not installed")
     def test_connection_uses_neutral_environment_keys(self):
         env = {
             "PLATFORM_DB_HOST": "db.example.test",
@@ -71,6 +72,7 @@ class DatabaseConfigTests(unittest.TestCase):
             "PLATFORM_DB_CONNECT_TIMEOUT": "7",
             "PLATFORM_DB_READ_TIMEOUT": "8",
             "PLATFORM_DB_WRITE_TIMEOUT": "9",
+            "PLATFORM_DB_POOL_ENABLED": "0",
         }
         with patch.object(platform_config, "_PROJECT_DEFAULTS", {}), \
                 patch.dict(os.environ, env, clear=True), \
@@ -87,25 +89,12 @@ class DatabaseConfigTests(unittest.TestCase):
         self.assertEqual(args["read_timeout"], 8)
         self.assertEqual(args["write_timeout"], 9)
 
-    def test_legacy_credentials_remain_usable_when_neutral_keys_are_blank(self):
-        env = {
-            "PLATFORM_DB_HOST": "db.example.test",
-            "PLATFORM_DB_NAME": "",
-            "DB_NAME": "legacy_project_db",
-            "PLATFORM_DB_USER": "",
-            "DB_USER": "legacy-user",
-            "PLATFORM_DB_PASSWORD": "",
-            "DB_PWD": "legacy-password",
-        }
+    def test_undeclared_legacy_credentials_are_not_used(self):
         with patch.object(platform_config, "_PROJECT_DEFAULTS", {}), \
-                patch.dict(os.environ, env, clear=True), \
-                patch.object(db_conn.pymysql, "connect") as connect:
-            db_conn.db()
-
-        args = connect.call_args.kwargs
-        self.assertEqual(args["database"], "legacy_project_db")
-        self.assertEqual(args["user"], "legacy-user")
-        self.assertEqual(args["password"], "legacy-password")
+                patch.object(platform_config, "_PROJECT_ALIASES", {}), \
+                patch.dict(os.environ, {"DB_NAME": "legacy", "DB_USER": "legacy", "DB_PWD": "legacy"}, clear=True):
+            settings = db_conn._db_settings()
+        self.assertEqual((settings["name"], settings["user"], settings["password"]), ("", "", ""))
 
     def test_missing_database_name_has_no_core_sample_project_fallback(self):
         env = {

@@ -258,6 +258,19 @@
         "test_adapter_recipes"
       ],
       "javascript": []
+    },
+    "db-pool": {
+      "sources": [
+        "test-platform/common/db_conn.py",
+        "requirements.txt",
+        "tests/test_db_pool.py",
+        "tests/test_db_config.py"
+      ],
+      "python": [
+        "test_db_pool",
+        "test_db_config"
+      ],
+      "javascript": []
     }
   },
   "required_sources": [
