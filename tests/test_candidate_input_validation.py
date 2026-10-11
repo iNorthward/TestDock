@@ -180,6 +180,7 @@ class CandidateInputValidationTests(unittest.TestCase):
             )
             stderr = io.StringIO()
             with patch.object(coverage_scorecard.gen_e, "LOCAL_OAS", oas), \
+                    patch.object(coverage_scorecard, "pack_data_path", return_value=coverage), \
                     patch.object(coverage_scorecard.gen_e, "COVERAGE_JSON", coverage), \
                     patch.object(sys, "argv", ["coverage_scorecard.py", "--covered-only", "--json"]), \
                     contextlib.redirect_stderr(stderr), \

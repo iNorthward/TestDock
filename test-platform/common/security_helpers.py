@@ -46,7 +46,7 @@ def guard_unscoped_write(case_id, action="写请求"):
         return None
     return {
         "label": case_id,
-        "ok": True,
+        "ok": None,
         "status": "incomplete",
         "detail": (
             f"未执行：无资源标识的{action}可能扩大影响范围；仅在一次性隔离环境设置 "
@@ -61,7 +61,7 @@ def guard_write_case(case_id, reason="该用例可能产生持久化副作用"):
         return None
     return {
         "label": case_id,
-        "ok": True,
+        "ok": None,
         "status": "incomplete",
         "detail": (
             f"未执行：{reason}；仅在隔离测试环境设置 "

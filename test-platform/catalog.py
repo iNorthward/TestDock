@@ -2,10 +2,12 @@
 """Pack-discovered case registry: suite aggregation, execution, and navigation."""
 import importlib
 import os
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import importlib.util
 import sys
 import time
+import threading
+from functools import wraps
 from collections import Counter
 from pathlib import Path
 
@@ -16,6 +18,101 @@ if str(REPO_ROOT) not in sys.path:
 from pack_registry import case_module_name, case_source_files, load_catalog_extensions, load_packs  # noqa: E402
 from execution_guard import ExecutionBusy, resource_guard  # noqa: E402
 from execution_jobs import JobCancelled, JobTimedOut, checkpoint  # noqa: E402
+
+class RegistryLock:
+    """Concurrent executions hold read leases; reload waits for every lease."""
+    def __init__(self):
+        self.condition = threading.Condition(threading.RLock())
+        self.readers = {}
+        self.writer = None
+        self.depth = 0
+        self.waiting_writers = 0
+
+    @contextmanager
+    def read(self, *, wait_for_writers=True):
+        owner = threading.get_ident()
+        with self.condition:
+            while ((self.writer is not None and self.writer != owner)
+                   or (wait_for_writers and self.waiting_writers and owner not in self.readers and self.writer != owner)):
+                self.condition.wait(.1)
+                checkpoint()
+            self.readers[owner] = self.readers.get(owner, 0) + 1
+        try:
+            yield
+        finally:
+            with self.condition:
+                self.readers[owner] -= 1
+                if not self.readers[owner]:
+                    del self.readers[owner]
+                self.condition.notify_all()
+
+    @contextmanager
+    def try_write(self):
+        """Watchers defer reload until idle, without queuing a blocking writer."""
+        owner = threading.get_ident()
+        with self.condition:
+            acquired = not self.readers and (self.writer is None or self.writer == owner)
+            if acquired:
+                self.writer = owner
+                self.depth += 1
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                self.__exit__()
+
+    def __enter__(self):
+        owner = threading.get_ident()
+        with self.condition:
+            if owner in self.readers and self.writer != owner:
+                raise RuntimeError("执行期间不能重载目录")
+            self.waiting_writers += 1
+            try:
+                while ((self.writer is not None and self.writer != owner) or self.readers):
+                    self.condition.wait(.1)
+                    checkpoint()
+                self.writer = owner
+                self.depth += 1
+            finally:
+                self.waiting_writers -= 1
+        return self
+
+    def __exit__(self, *_):
+        with self.condition:
+            self.depth -= 1
+            if not self.depth:
+                self.writer = None
+            self.condition.notify_all()
+
+
+REGISTRY_LOCK = RegistryLock()
+
+
+def registry_locked(function):
+    @wraps(function)
+    def locked(*args, **kwargs):
+        with REGISTRY_LOCK:
+            return function(*args, **kwargs)
+    return locked
+
+
+def registry_read(function):
+    @wraps(function)
+    def locked(*args, **kwargs):
+        with REGISTRY_LOCK.read():
+            return function(*args, **kwargs)
+    return locked
+
+
+def registry_view(function):
+    @wraps(function)
+    def locked(*args, **kwargs):
+        # An active writer still excludes reads; a queued reload does not hide
+        # the unchanged catalog from the panel during a long execution.
+        with REGISTRY_LOCK.read(wait_for_writers=False):
+            return function(*args, **kwargs)
+    return locked
+
 
 PACKS = load_packs()
 MODULE_ORDER_HINT = [name for pack in PACKS for name in pack["module_order_hint"]]
@@ -155,6 +252,7 @@ def catalog_section(section_id, force_refresh=False):
     return {}
 
 
+@registry_locked
 def reload_registry():
     """热重载所有 *_cases.py 并重建目录（改文件后无需重启 server）。"""
     global _RELOAD_FAILED
@@ -193,6 +291,7 @@ def _case_write_guard(case):
     return None
 
 
+@registry_view
 def catalog(lite=False):
     data = {
         "groups": GROUPS,
@@ -216,6 +315,7 @@ def _ensure_case_identities(case, mod):
                          str(required.get("role") or "unknown"), required=True)
 
 
+@registry_read
 def exec_case(case_id, execution_options=None):
     checkpoint()
     if _RELOAD_FAILED:
@@ -296,7 +396,10 @@ def exec_case(case_id, execution_options=None):
     return normalized
 
 
+@registry_read
 def run_all(mode="safe", suite=None, execution_options=None):
+    if mode not in ("safe", "live"):
+        raise ValueError("mode 必须是 safe 或 live")
     if _RELOAD_FAILED:
         raise RuntimeError("目录重载失败，已停止案例执行；请修复源码并重新加载目录")
     try:

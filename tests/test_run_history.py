@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import closing
+
 import subprocess
 import sys
 import tempfile
@@ -74,7 +76,7 @@ class RunHistoryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             db_path = Path(td) / "legacy.db"
             import sqlite3
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 conn.executescript("""
                     CREATE TABLE runs (
                         id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, mode TEXT NOT NULL,
@@ -110,7 +112,7 @@ class RunHistoryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             db_path = Path(td) / "legacy.db"
             import sqlite3
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 conn.executescript("""
                     CREATE TABLE runs (
                         id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, mode TEXT NOT NULL,
@@ -135,7 +137,7 @@ class RunHistoryTest(unittest.TestCase):
             ready_dir.mkdir()
             gate = base / "start"
             import sqlite3
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 conn.executescript("""
                     CREATE TABLE runs (
                         id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, mode TEXT NOT NULL,

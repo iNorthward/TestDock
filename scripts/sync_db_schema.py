@@ -36,7 +36,7 @@ def connect_db():
     schema_read_timeout = project_setting("PLATFORM_SCHEMA_READ_TIMEOUT", default="")
     read_timeout = int(schema_read_timeout or project_setting("PLATFORM_DB_READ_TIMEOUT", default="120") or 120)
     write_timeout = int(project_setting("PLATFORM_DB_WRITE_TIMEOUT", default="60") or 60)
-    database = project_setting("PLATFORM_DB_NAME", aliases=("DB_NAME",), default="")
+    database = project_setting("PLATFORM_DB_NAME", default="")
     return open_db(
         database=database,
         connect_timeout=connect_timeout,
@@ -375,7 +375,7 @@ def sync_schema_with_progress(conn=None, progress_callback=None, max_workers=16)
 def fetch_current_schema_with_progress(conn=None, progress_callback=None, max_workers=16):
     """获取数据库当前的表结构（带进度）。max_workers 保留兼容，不再并行开连接。"""
     del max_workers  # 避免 16 路并发打 information_schema 导致 2013 断连
-    db_name = str(project_setting("PLATFORM_DB_NAME", aliases=("DB_NAME",), default="") or "").strip()
+    db_name = str(project_setting("PLATFORM_DB_NAME", default="") or "").strip()
     if not db_name:
         raise RuntimeError("缺少 PLATFORM_DB_NAME；请由所选 pack 提供数据库名或显式设置环境变量")
     should_close = False

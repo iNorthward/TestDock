@@ -11,7 +11,7 @@ PLATFORM_PACKS=my_app PLATFORM_ENV_FILE=/dev/null python3 scripts/targeted_regre
 PLATFORM_ENV_FILE=.env.my_app ./start.sh start
 ```
 
-打开 http://localhost:8802，运行 DEMO-R01。目录、进程、数据、测试已独立，接下来替换本 Pack Adapter 与案例。
+打开 http://localhost:8802，运行 MY_APP-R01（新生成离线 Pack 的 ID 为 `<PACK_ID大写>-R01`）。目录、进程、数据、测试已独立，接下来替换本 Pack Adapter 与案例。
 
 ## 路线 B：已经有只读 HTTP 契约
 

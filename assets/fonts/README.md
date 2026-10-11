@@ -1,4 +1,4 @@
-# PLATFORM 自托管字体
+# TestDock 自托管字体
 
 面板主题使用的 Inter / JetBrains Mono / Montserrat / Cormorant Garamond，全部打包在仓库内，**不依赖 Google Fonts CDN**。
 

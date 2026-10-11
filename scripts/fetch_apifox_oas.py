@@ -57,52 +57,15 @@ def _load_env_local():
     load_project_env()
 
 
-def _credentials_from_cursor_mcp() -> tuple[str | None, str | None]:
-    mcp = Path.home() / ".cursor" / "mcp.json"
-    if not mcp.is_file():
-        return None, None
-    try:
-        data = json.loads(mcp.read_text(encoding="utf-8"))
-    except Exception:
-        return None, None
-    servers = data.get("mcpServers") or {}
-    for name, cfg in servers.items():
-        if not isinstance(cfg, dict):
-            continue
-        cmd = str(cfg.get("command") or "")
-        if "apifox-mcp-server" not in cmd and "apifox" not in name.lower():
-            continue
-        env = cfg.get("env") or {}
-        token = env.get("APIFOX_ACCESS_TOKEN")
-        project = None
-        for arg in cfg.get("args") or []:
-            if isinstance(arg, str) and arg.startswith("--project-id="):
-                project = arg.split("=", 1)[1]
-        if token:
-            return str(token), str(project) if project else None
-    return None, None
-
-
 def resolve_credentials() -> tuple[str, str]:
-    import os
     _load_env_local()
-    token = (os.environ.get("APIFOX_ACCESS_TOKEN") or os.environ.get("APIFOX_TOKEN") or "").strip()
+    token = str(project_input_setting("APIFOX_ACCESS_TOKEN", default="") or "").strip()
     project = str(project_input_setting("APIFOX_PROJECT_ID", default="") or "").strip()
     if not project:
         raise RuntimeError("[incomplete] 未配置 APIFOX_PROJECT_ID；请在环境变量或所选 pack 中提供")
     if not token:
-        mcp_token, mcp_project = _credentials_from_cursor_mcp()
-        if mcp_token:
-            if mcp_project != project:
-                raise RuntimeError(
-                    "[incomplete] Cursor MCP 的 Apifox 项目与所选 Pack 不一致或未声明；"
-                    "请为当前项目显式配置 APIFOX_ACCESS_TOKEN"
-                )
-            token = mcp_token
-    if not token:
         raise RuntimeError(
-            "缺少 Apifox 凭据：请在 .env.local 配置 APIFOX_ACCESS_TOKEN，"
-            "或在 Cursor MCP（apifox-mcp-server）中配置同一令牌"
+            "[incomplete] 缺少 Apifox 凭据：请在当前项目环境文件显式配置 APIFOX_ACCESS_TOKEN"
         )
     return token, project
 

@@ -332,6 +332,9 @@ def _bootstrap_src_from_cursor() -> bool:
 
 
 def sync(*, check: bool = False, prefer: str = "src") -> int:
+    if check and not any(directory.is_dir() for directory in (SRC_DIR, CURSOR_DIR, CLAUDE_DIR)):
+        print("[incomplete] 未配置规则目录，无法核对规则同步")
+        return 2
     if not check:
         _bootstrap_src_from_cursor()
         SRC_DIR.mkdir(parents=True, exist_ok=True)

@@ -13,6 +13,9 @@ import sys
 import threading
 import logging
 import time
+import os
+import secrets
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse, unquote
@@ -39,10 +42,12 @@ import run_history as rh  # noqa: E402
 import execution_jobs as jobs  # noqa: E402
 from execution_provenance import execution_metadata  # noqa: E402
 
+from http_security import authorize, RequestRejected
+
 PORT = panel_port()
 CATALOG_REVISION = 0
 _CATALOG_WATCH_INTERVAL = 1.0
-_CATALOG_LOCK = threading.Lock()
+_CATALOG_LOCK = cat.REGISTRY_LOCK
 INSPECT_REPORT_DIR = business_knowledge_subpath("PLATFORM_APIFOX_REPORT_SUBDIR")
 SCHEMA_REPORT_DIR = business_knowledge_subpath("PLATFORM_SCHEMA_REPORT_SUBDIR")
 PACK_DATA_DIR = pack_data_path()
@@ -177,16 +182,35 @@ def _catalog_fingerprints():
     return fingerprints
 
 
+_CATALOG_LOADED_FINGERPRINTS = _catalog_fingerprints()
+
+
+class CatalogReloadBusy(RuntimeError):
+    pass
+
+
 def reload_catalog_registry(reason="manual"):
     """热重载用例模块并 bump revision（供 HTTP / 文件监听共用）。"""
-    global CATALOG_REVISION
-    with _CATALOG_LOCK:
+    global CATALOG_REVISION, _CATALOG_LOADED_FINGERPRINTS
+    with _CATALOG_LOCK.try_write() as acquired:
+        if not acquired:
+            raise CatalogReloadBusy("执行中或目录正在重载，请稍后重试")
+        fingerprints = _catalog_fingerprints()
         info = cat.reload_registry()
         sync_case_module_aliases()
         CATALOG_REVISION += 1
+        _CATALOG_LOADED_FINGERPRINTS = fingerprints
         info["revision"] = CATALOG_REVISION
         info["reason"] = reason
         return info
+
+
+def reload_catalog_if_idle():
+    """Return None while execution is active; the watcher retries next poll."""
+    with _CATALOG_LOCK.try_write() as acquired:
+        if not acquired:
+            return None
+        return reload_catalog_registry(reason="watch")
 
 
 def catalog_revision_payload():
@@ -194,6 +218,7 @@ def catalog_revision_payload():
         "revision": CATALOG_REVISION,
         "cases": len(cat._ALL),
         "suites": len(cat.SUITES),
+        "reloadPending": _catalog_fingerprints() != _CATALOG_LOADED_FINGERPRINTS,
     }
 
 
@@ -216,6 +241,16 @@ def run_catalog_validation():
     }
 
 
+def _poll_catalog_reload(state):
+    new_fp = _catalog_fingerprints()
+    if new_fp == state["fingerprints"]:
+        return None
+    info = reload_catalog_if_idle()
+    if info is not None:
+        state["fingerprints"] = new_fp
+    return info
+
+
 def _start_catalog_watcher():
     """后台轮询 *_cases.py mtime，变更时自动 reload（无需手点刷新）。"""
     state = {"fingerprints": _catalog_fingerprints()}
@@ -224,10 +259,8 @@ def _start_catalog_watcher():
         while True:
             time.sleep(_CATALOG_WATCH_INTERVAL)
             try:
-                new_fp = _catalog_fingerprints()
-                if new_fp != state["fingerprints"]:
-                    state["fingerprints"] = new_fp
-                    info = reload_catalog_registry(reason="watch")
+                info = _poll_catalog_reload(state)
+                if info is not None:
                     print("[catalog] auto-reload revision=%s cases=%s" % (
                         info.get("revision"), info.get("cases")))
             except Exception as exception:
@@ -383,11 +416,60 @@ def _panel_execution_options(data):
     return options
 
 
+class PanelHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def __init__(self, address, handler):
+        self.session_token = secrets.token_urlsafe(32)
+        super().__init__(address, handler)
+
+
 class H(BaseHTTPRequestHandler):
-    def log_message(self, *a):
-        pass
+    def log_message(self, format_string, *args):
+        # Do not log query strings, headers, credentials or request bodies.
+        logging.getLogger(__name__).info("request=%s method=%s status=%s",
+                                         getattr(self, "request_id", "-"), self.command,
+                                         args[1] if len(args) > 1 else "-")
+
+    def _authorize(self, *, mutation=False):
+        self.request_id = uuid.uuid4().hex
+        path = urlparse(self.path).path
+        try:
+            authorize(self.headers, port=self.server.server_port,
+                      token=self.server.session_token, api=path.startswith("/api/"),
+                      session=path == "/api/session", mutation=mutation)
+        except RequestRejected as exc:
+            self.close_connection = True
+            self._json(exc.status, {"ok": False, "error": str(exc)})
+            return False
+        return True
+
+    def _diagnostic_allowed(self, path):
+        from pack_registry import diagnostic_capabilities
+        capability = ("contract" if path.startswith("/api/apifox/") or path == "/api/coverage"
+                      else "database" if path.startswith("/api/db-schema/") else None)
+        if capability and capability not in diagnostic_capabilities(cat.PACKS[0]):
+            self._json(404, {"ok": None, "status": "incomplete", "error": "当前 Pack 未声明该诊断能力"})
+            return False
+        return True
+
+    def _html(self, path):
+        page = path.read_text(encoding="utf-8")
+        # Load before inline scripts and any other fetch wrappers.
+        page = page.replace("<head>", '<head><script src="/assets/security-client.js"></script>', 1)
+        body = page.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _json(self, code, payload, no_cache=True):
+        if code >= 500:
+            request_id = getattr(self, "request_id", uuid.uuid4().hex)
+            logging.getLogger(__name__).error("request=%s internal_error=%r", request_id, payload.get("error"))
+            payload = {"ok": False, "error": "服务内部错误，请查看服务日志", "requestId": request_id}
         b = jdump(payload)
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -433,8 +515,27 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(b)
 
     def do_GET(self):
+        if not self._authorize():
+            return
+        try:
+            self._dispatch_GET()
+        except (BrokenPipeError, ConnectionResetError):
+            logging.getLogger(__name__).info("request=%s disconnected", self.request_id)
+        except Exception:
+            logging.getLogger(__name__).exception("request=%s GET failed", self.request_id)
+            self._json(500, {"error": "GET handler failed"})
+
+    def _dispatch_GET(self):
         p = urlparse(self.path)
         qs = parse_qs(p.query)
+        if p.path == "/api/session":
+            self._json(200, {"ok": True, "token": self.server.session_token})
+            return
+        if p.path in ("/api/catalog/reload", "/api/db-schema/sync-stream", "/api/db-schema/patrol-stream") or (p.path == "/api/catalog" and self._qs_flag(qs, "reload")):
+            self._json(405, {"ok": False, "error": "此操作须使用 POST"})
+            return
+        if not self._diagnostic_allowed(p.path):
+            return
         if p.path == "/api/document":
             relative = (qs.get("path") or [""])[0]
             document = (REPO / relative).resolve()
@@ -448,13 +549,7 @@ class H(BaseHTTPRequestHandler):
                 self._json(404, {"ok": False, "error": "文档不存在或不可读"})
             return
         if p.path == "/whitepaper" or (unquote(p.path).endswith(".md") and p.path.startswith(("/docs/", "/examples/adapter_recipes/"))):
-            b = (ROOT / "document.html").read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("Content-Length", str(len(b)))
-            self.end_headers()
-            self.wfile.write(b)
+            self._html((ROOT / "document.html"))
             return
         if p.path == "/api/whitepaper":
             document = REPO / "docs" / "architecture" / "TEST_PLATFORM_ARCHITECTURE.md"
@@ -492,13 +587,7 @@ class H(BaseHTTPRequestHandler):
         elif p.path.startswith("/pack-assets/"):
             self._serve_repo_asset(p.path[len("/pack-assets/"):], asset_root=cat.PACKS[0]["root"] / "assets")
         elif p.path in ("/", "/index.html"):
-            b = PANEL_HTML.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("Content-Length", str(len(b)))
-            self.end_headers()
-            self.wfile.write(b)
+            self._html(PANEL_HTML)
         elif p.path == "/api/history":
             try:
                 limit = rh.validate_history_parameter(
@@ -529,6 +618,8 @@ class H(BaseHTTPRequestHandler):
                     self._json(404, {"ok": False, "error": "run 不存在"})
                 else:
                     self._json(200, {"ok": True, "data": detail})
+            except ValueError as e:
+                self._json(400, {"ok": False, "error": str(e)})
             except Exception as e:
                 self._json(500, {"ok": False, "error": str(e)})
         elif p.path == "/api/history/case":
@@ -665,13 +756,7 @@ class H(BaseHTTPRequestHandler):
                 "error": "[incomplete] 当前 pack 未提供可选异常日志审计",
             })
         elif p.path in ("/insights", "/insights.html"):
-            b = (ROOT / "insights.html").read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("Content-Length", str(len(b)))
-            self.end_headers()
-            self.wfile.write(b)
+            self._html((ROOT / "insights.html"))
         elif p.path == "/api/flaky":
             try:
                 window = rh.validate_history_parameter(
@@ -699,41 +784,11 @@ class H(BaseHTTPRequestHandler):
                 self._json(200, {"ok": True, "data": run_catalog_validation()})
             except Exception as e:
                 self._json(500, {"ok": False, "error": str(e)})
-        elif p.path == "/api/db-schema/sync-stream":
-            try:
-                _schema_sync_sse(self, max_workers=16)
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                try:
-                    msg = json.dumps({"type": "error", "error": str(e)}, ensure_ascii=False)
-                    self.wfile.write(f"data: {msg}\n\n".encode("utf-8"))
-                    self.wfile.flush()
-                except Exception:
-                    pass
-        elif p.path == "/api/db-schema/patrol-stream":
-            try:
-                _schema_patrol_sse(self, max_workers=16)
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                try:
-                    msg = json.dumps({"type": "error", "error": str(e)}, ensure_ascii=False)
-                    self.wfile.write(f"data: {msg}\n\n".encode("utf-8"))
-                    self.wfile.flush()
-                except Exception:
-                    pass
         elif p.path == "/api/db-schema/patrol/cache":
             try:
                 cache_file = PACK_DATA_DIR / "db_schema_patrol_cache.json" if PACK_DATA_DIR else None
                 if cache_file and cache_file.exists():
                     data = json.loads(cache_file.read_text(encoding="utf-8"))
-                    if data.get("has_changes") and (not data.get("agentPrompt") or not data.get("impact")):
-                        data = _enrich_schema_patrol_result(data, write_report=not data.get("impactReportPath"))
-                        try:
-                            cache_file.write_text(json.dumps(data, ensure_ascii=False, default=str), encoding="utf-8")
-                        except Exception:
-                            pass
                     self._json(200, {"ok": True, "data": data})
                 else:
                     self._json(200, {"ok": True, "data": None})
@@ -741,26 +796,28 @@ class H(BaseHTTPRequestHandler):
                 self._json(500, {"ok": False, "error": str(e)})
         elif p.path == "/api/catalog/revision":
             self._json(200, {"ok": True, "data": catalog_revision_payload()})
-        elif p.path == "/api/catalog/reload":
-            info = reload_catalog_registry(reason="http-get")
-            self._json(200, {"ok": True, "data": info})
         elif p.path == "/api/catalog":
-            reload_meta = None
-            if self._qs_flag(qs, "reload"):
-                reload_meta = reload_catalog_registry(reason="http-catalog")
             lite = self._qs_flag(qs, "lite")
             payload = cat.catalog(lite=lite)
             payload["packs"] = panel_pack_summaries(cat.PACKS)
             payload["catalogRevision"] = CATALOG_REVISION
-            if reload_meta:
-                payload["reload"] = reload_meta
             self._json(200, {"ok": True, "data": payload})
         else:
             self._json(404, {"ok": False, "error": "not found"})
 
     def do_POST(self):
+        if not self._authorize(mutation=True):
+            return
+        try:
+            self._dispatch_POST()
+        except (BrokenPipeError, ConnectionResetError):
+            logging.getLogger(__name__).info("request=%s disconnected", self.request_id)
+
+    def _dispatch_POST(self):
         try:
             path = urlparse(self.path).path
+            if not self._diagnostic_allowed(path):
+                return
             data = self._body()
             if not isinstance(data, dict):
                 self._json(400, {"ok": False, "error": "请求 JSON 须为对象"})
@@ -771,14 +828,29 @@ class H(BaseHTTPRequestHandler):
                 job = jobs.get_store().cancel(data.get("id"))
                 self._json(200 if job else 404, {"ok": bool(job), "data": job, "error": None if job else "任务不存在"})
             elif path == "/api/catalog/reload":
-                info = reload_catalog_registry(reason="http-post")
-                self._json(200, {"ok": True, "data": info})
+                try:
+                    info = reload_catalog_registry(reason="http-post")
+                except CatalogReloadBusy as exc:
+                    self._json(409, {"ok": None, "status": "incomplete", "error": str(exc)})
+                else:
+                    self._json(200, {"ok": True, "data": info})
             elif path == "/api/run":
                 result = _run_panel_request(data, batch=True)
                 self._json(200, {"ok": True, "data": result})
             elif path == "/api/run-case":
                 result = _run_panel_request(data, batch=False)
                 self._json(200, {"ok": True, "data": result})
+            elif path in ("/api/db-schema/sync-stream", "/api/db-schema/patrol-stream"):
+                try:
+                    (_schema_sync_sse if path.endswith("/sync-stream") else _schema_patrol_sse)(self)
+                except (BrokenPipeError, ConnectionResetError):
+                    logging.getLogger(__name__).info("schema stream disconnected")
+                except Exception:
+                    logging.getLogger(__name__).exception("schema stream failed")
+                    self.wfile.write('data: {"type":"error","error":"巡检失败，请查看服务日志"}\n\n'.encode('utf-8'))
+                    self.wfile.flush()
+                finally:
+                    self.close_connection = True
             elif path == "/api/db-schema/sync":
                 try:
                     scripts_dir = REPO / "scripts"
@@ -831,16 +903,45 @@ class H(BaseHTTPRequestHandler):
             self._json(500, {"ok": False, "error": str(e)})
 
 
+def _validate_panel_execution(data, *, batch):
+    mode = data.get("mode", "safe")
+    if mode not in ("safe", "live"):
+        raise ValueError("mode 必须是 safe 或 live")
+    if batch:
+        suite = data.get("suite")
+        if suite is not None and (not isinstance(suite, str) or suite not in {s["id"] for s in cat.SUITES}):
+            raise ValueError("suite 不存在")
+        live = mode == "live"
+        confirmation = suite or "all"
+    else:
+        case_id = data.get("id")
+        if not isinstance(case_id, str) or case_id not in cat._CAT:
+            raise ValueError("case id 不存在")
+        case = cat._CAT[case_id]
+        live = case.get("mode") == "live" or bool(case.get("requires_write_opt_in") or case.get("requires_unscoped_write_opt_in"))
+        confirmation = case_id
+    if live and (os.environ.get("PLATFORM_ALLOW_LIVE") != "1" or data.get("confirmLive") != confirmation):
+        raise ValueError("LIVE 须设置 PLATFORM_ALLOW_LIVE=1 并以 confirmLive 确认 case ID / suite（全量为 all）")
+
+
 def _run_panel_request(data, *, batch):
+    _validate_panel_execution(data, batch=batch)
     options = _panel_execution_options(data)
-    metadata = execution_metadata(options)
+    with cat.REGISTRY_LOCK.read():
+        metadata = execution_metadata(options)
 
     def execute():
+        with cat.REGISTRY_LOCK.read():
+            return execute_locked()
+
+    def execute_locked():
+        _validate_panel_execution(data, batch=batch)
+        captured_metadata = execution_metadata(options)
         t0 = time.monotonic()
         result = (cat.run_all(data.get("mode", "safe"), data.get("suite"), execution_options=options)
                   if batch else cat.exec_case(data.get("id"), execution_options=options))
         result = dict(result)
-        result["executionMetadata"] = metadata
+        result["executionMetadata"] = captured_metadata
         try:
             if batch:
                 result["runId"] = rh.record_run(result, source="panel", duration_ms=int((time.monotonic()-t0)*1000))
@@ -856,7 +957,7 @@ def _run_panel_request(data, *, batch):
             result["historySaved"] = True
         except Exception as exc:
             result["historySaved"] = False
-            result["historyError"] = str(exc)
+            result["historyError"] = "历史保存失败，请查看服务日志"
             logging.getLogger(__name__).error("案例/批次 %s 历史保存失败：%s", data.get("id") or data.get("suite"), exc)
         return result
 
@@ -872,12 +973,13 @@ def _run_panel_request(data, *, batch):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="PLATFORM 当前项目面板")
+    parser = argparse.ArgumentParser(description="TestDock 当前项目面板")
     parser.add_argument('--pack', default=cat.PACKS[0]['id'])
     parser.add_argument('--port', type=int, default=PORT)
     args = parser.parse_args()
     if args.pack != cat.PACKS[0]['id'] or args.port != PORT:
         parser.error("启动标签与所选项目 / PLATFORM_PANEL_PORT 不一致")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     store = jobs.get_store()
     recovered, pruned = store.recover(), store.prune()
     logging.getLogger(__name__).info("任务存储就绪：中断 %d，清理 %d", recovered, pruned)
@@ -886,7 +988,7 @@ def main():
         startup = getattr(extension, "startup", None)
         if callable(startup):
             startup()
-    httpd = ThreadingHTTPServer(("127.0.0.1", PORT), H)
+    httpd = PanelHTTPServer(("127.0.0.1", PORT), H)
     httpd.daemon_threads = True
     print("测试面板已启动: http://localhost:%d" % PORT)
     print("用例目录: 监听 *_cases.py 变更并自动热重载 (revision 轮询 /api/catalog/revision)")

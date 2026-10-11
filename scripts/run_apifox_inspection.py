@@ -357,15 +357,15 @@ def render_report(today: str, b: dict, c: dict, d: dict) -> str:
         "| 项 | 值 |",
         "| --- | --- |",
         f"| 已接入 HTTP 操作 | {audit_r['covered_count']} |",
-        f"| 本地基线 trade 操作 | {audit_r['local_trade_paths']} |",
-        f"| Apifox 在线 trade 操作 | {audit_r['apifox_trade_paths']} |",
+        f"| 本地基线 HTTP 操作 | {audit_r['local_trade_paths']} |",
+        f"| Apifox 在线 HTTP 操作 | {audit_r['apifox_trade_paths']} |",
         f"| 覆盖路径（自动化） | {cov.get('coveredPaths', '—')} / Apifox {cov.get('apifoxPaths', '—')} |",
         f"| 契约变更（指纹级） | {len(audit_r['contract_diffs'])} |",
         f"| 契约变更（schema 字段级） | {len(schema_diffs)} |",
         f"| 本地基线缺失（已覆盖） | {len(audit_r['missing_in_local'])} |",
         f"| 覆盖清单与 Apifox 不一致 | {len(audit_r['missing_in_apifox'])} |",
         f"| Apifox 已删除（基线有） | {len(removed_ops)} |",
-        f"| Apifox 新增 trade 操作 | {len(audit_r['new_in_apifox'])} |",
+        f"| Apifox 新增 HTTP 操作 | {len(audit_r['new_in_apifox'])} |",
         f"| 基线 | {baseline_label} |",
     ]
     if dl:
@@ -647,7 +647,7 @@ def main():
 
         warnings = []
         if b["summary"].get("newInApifox"):
-            warnings.append(f"Apifox 新增 {b['summary']['newInApifox']} 条 trade 操作")
+            warnings.append(f"Apifox 新增 {b['summary']['newInApifox']} 条 HTTP 操作")
         if b["summary"].get("contractDiffs"):
             warnings.append(f"契约指纹变更 {b['summary']['contractDiffs']} 条（见报告 §2）")
         if b["summary"].get("schemaDiffs"):

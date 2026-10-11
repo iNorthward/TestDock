@@ -9,7 +9,8 @@
         "test-platform/run_history.py",
         "test-platform/history_compare.py",
         "scripts/isolated_case_worker.py",
-        "test-platform/isolated_runner.py"
+        "test-platform/isolated_runner.py",
+        "test-platform/http_security.py"
       ],
       "python": [
         "test_execution_guard",
@@ -25,7 +26,9 @@
         "test_background_execution",
         "test_history_compare",
         "test_execution_queue",
-        "test_isolated_runner"
+        "test_isolated_runner",
+        "test_audit_fixes",
+        "test_recheck_fixes"
       ],
       "javascript": []
     },
@@ -66,12 +69,15 @@
         "test-platform/common/response_envelope.py",
         "test-platform/common/security_helpers.py",
         "test-platform/common/env_config.py",
-        "test-platform/common/db_conn.py"
+        "test-platform/common/db_conn.py",
+        "test-platform/common/case_result_status.py"
       ],
       "python": [
         "test_env_config_lazy",
         "test_db_config",
-        "test_case_result_status"
+        "test_case_result_status",
+        "test_audit_fixes",
+        "test_recheck_fixes"
       ],
       "javascript": []
     },
@@ -114,7 +120,8 @@
         ".cursor/rules/*",
         ".claude/rules/*",
         "scripts/offline_*.py",
-        "scripts/offline_guard.cjs"
+        "scripts/offline_guard.cjs",
+        "scripts/check.sh"
       ],
       "python": [
         "test_targeted_regression",
@@ -130,14 +137,16 @@
         "assets/theme-boot.js",
         "assets/theme-switcher.js",
         "test-platform/insights.html",
-        "assets/themes/*.css"
+        "assets/themes/*.css",
+        "assets/security-client.js"
       ],
       "python": [
         "test_panel_pack_labels"
       ],
       "javascript": [
         "tests/test_execution_client.js",
-        "tests/test_theme_contract.js"
+        "tests/test_theme_contract.js",
+        "tests/test_security_client.js"
       ]
     },
     "catalog-tools": {
@@ -167,7 +176,8 @@
         "scripts/openapi_contract.py",
         "scripts/candidate_inputs.py",
         "scripts/project_inputs.py",
-        "scripts/gen_[defr]_series_candidates.py"
+        "scripts/gen_[defr]_series_candidates.py",
+        "scripts/coverage_scorecard.py"
       ],
       "python": [
         "test_openapi_candidate_rules",
@@ -221,11 +231,13 @@
         "scripts/sync_json_wire_types.py",
         "scripts/migrate_api_entrypoints.py",
         "scripts/validate_schema_refs.py",
-        "scripts/gen_kb_report_indexes.py"
+        "scripts/gen_kb_report_indexes.py",
+        "scripts/pack_tool.py"
       ],
       "python": [
         "test_platform_isolation",
-        "test_schema_impact_pack_scope"
+        "test_schema_impact_pack_scope",
+        "test_audit_fixes"
       ],
       "javascript": []
     },
@@ -258,6 +270,20 @@
         "test_adapter_recipes"
       ],
       "javascript": []
+    },
+    "review-fixes": {
+      "sources": [
+        "tests/test_recheck_fixes.py",
+        "docs/onboarding/AGENT_INTEGRATION.md",
+        "docs/onboarding/AGENT_OPERATIONS.md",
+        "docs/onboarding/QUICKSTART.md"
+      ],
+      "python": [
+        "test_recheck_fixes"
+      ],
+      "javascript": [
+        "tests/test_security_client.js"
+      ]
     },
     "db-pool": {
       "sources": [

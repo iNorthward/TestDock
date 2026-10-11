@@ -101,7 +101,7 @@ def collect_existing_cases() -> dict[str, dict[str, list]]:
     """
     cov_path = pack_data_path("coverage.json")
     out: dict[str, dict[str, list]] = {}
-    coverage = load_coverage(cov_path, required=True)
+    coverage = load_coverage(cov_path, required=False)
     import catalog
     coverage_series_by_id = {
         case.get("id"): case.get("coverageSeries")

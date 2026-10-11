@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import warnings
 
 
 CASE_STATUSES = frozenset({"passed", "failed", "skipped", "incomplete"})
@@ -28,6 +29,7 @@ def _sub_status(sub):
     if not isinstance(detail, str):
         detail = ""
     if "跳过" in detail:
+        warnings.warn("子断言未声明 status，正使用旧版文本分类；请由 Pack 显式声明状态", RuntimeWarning, stacklevel=2)
         return "incomplete" if any(term in detail for term in _INFRASTRUCTURE_GAPS) else "skipped"
     return "passed"
 

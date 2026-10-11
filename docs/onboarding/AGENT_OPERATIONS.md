@@ -1,11 +1,13 @@
 # Agent 接入、升级与运行操作手册
 
+当前支持 macOS/Linux（POSIX）；Windows 不支持，不能以“未验证”推断可启动。新生成离线 Pack 的案例 ID 为 `<PACK_ID大写>-R01`；内置 demo 仍为 `DEMO-R01`，HTTP starter 仍使用显式 HTTP case ID。
+
 与完整接入手册共同使用；命令从平台根目录执行。生成新 Pack 后先运行自己的离线验证，真实业务验收按授权范围逐例执行。没有 Git 不影响以下命令。
 
 ## 一键体检
 
 ```sh
-python3 scripts/project_doctor.py --pack my_app --mock-case DEMO-R01 --report /tmp/my-app-doctor.json
+python3 scripts/project_doctor.py --pack my_app --mock-case MY_APP-R01 --report /tmp/my-app-doctor.json
 # HTTP starter 改用 --mock-case HTTP-MOCK-R01
 ```
 

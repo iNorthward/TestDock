@@ -13,6 +13,6 @@ plan=json.loads(Path(sys.argv[1]).read_text())
 sys.path[:0]=[str(Path(context['root'])/'tests'),context['root']]
 suite=unittest.defaultTestLoader.loadTestsFromNames(plan['python'])
 result=unittest.TextTestRunner(verbosity=1).run(suite)
-summary={'testsRun':result.testsRun,'failures':len(result.failures),'errors':len(result.errors),'ok':result.wasSuccessful()}
+summary={'testsRun':result.testsRun,'failures':len(result.failures),'errors':len(result.errors),'skipped':len(result.skipped),'ok':result.wasSuccessful()}
 Path(sys.argv[2]).write_text(json.dumps(summary))
 raise SystemExit(0 if summary['ok'] else 1)

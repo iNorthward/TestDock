@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import argparse
 import json
 import os
 import sys
@@ -22,10 +23,10 @@ _PANEL_GROUP = {
 }
 _DB_REQUIREMENTS = (
     ("PLATFORM_DB_HOST", ()),
-    ("PLATFORM_DB_USER", ("DB_USER",)),
-    ("PLATFORM_DB_PASSWORD", ("DB_PWD",)),
+    ("PLATFORM_DB_USER", ()),
+    ("PLATFORM_DB_PASSWORD", ()),
 )
-_APIFOX_REQUIREMENTS = (("APIFOX_ACCESS_TOKEN", ("APIFOX_TOKEN",)),)
+_APIFOX_REQUIREMENTS = (("APIFOX_ACCESS_TOKEN", ()),)
 _WEBHOOK_NAMES = ("PLATFORM_WEBHOOK_WECHAT", "PLATFORM_WEBHOOK_DINGTALK")
 
 
@@ -187,6 +188,12 @@ def build_preflight_report(env: Mapping[str, object] | None = None, *, root: Pat
     ]
     modules = []
     warnings = []
+    if root == REPO_ROOT:
+        from identity_pool import load_pool
+        pool_data = load_pool()
+        if ((pool_data.get("settings") or {}).get("default_password")
+                or any(row.get("password") for row in pool_data.get("identities", []))):
+            warnings.append("账号池包含明文密码；建议迁移为 env 密码引用（预检不显示密码值）")
     try:
         for path in _case_files(root, case_dirs):
             modules.append({
@@ -209,7 +216,7 @@ def build_preflight_report(env: Mapping[str, object] | None = None, *, root: Pat
 
 def render_preflight_report(report: dict) -> str:
     """Render a terminal summary containing names only, never configuration values."""
-    lines = ["PLATFORM 环境预检（只读；不会登录、连库或拉取 Apifox）"]
+    lines = ["TestDock 环境预检（只读；不会登录、连库或拉取 Apifox）"]
     for group in report.get("groups", []):
         lines.append(f"\n[{group.get('name', '')}]")
         missing = group.get("missing") or []
@@ -236,13 +243,17 @@ def render_preflight_report(report: dict) -> str:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args()
     root = REPO_ROOT
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
     from platform_config import load_project_env
 
     load_project_env()
-    print(render_preflight_report(build_preflight_report()))
+    report = build_preflight_report()
+    print(json.dumps(report, ensure_ascii=False, indent=2) if args.json else render_preflight_report(report))
     return 0
 
 

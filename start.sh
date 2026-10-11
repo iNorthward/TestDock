@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 启动 / 停止 PLATFORM 本地服务：测试面板 (8801)
+# 启动 / 停止 TestDock 本地服务：测试面板 (8801)
 # 启动：./start.sh  停止：./stop.sh  状态：./start.sh status
 set -euo pipefail
 
@@ -9,6 +9,12 @@ cd "$ROOT"
 # Read local variables without evaluating credential values as shell code.
 # Python uses the same PLATFORM_ENV_FILE selector; this exports TZ before startup logs.
 # shellcheck source=scripts/load_env.sh
+for dependency in python3 lsof curl ps seq; do
+  if ! command -v "$dependency" >/dev/null 2>&1; then
+    echo "缺少启动依赖：$dependency，请安装后重试" >&2
+    exit 2
+  fi
+done
 source "$ROOT/scripts/load_env.sh"
 
 LAUNCH_CONFIG="$(python3 "$ROOT/scripts/platform_launch_config.py")"

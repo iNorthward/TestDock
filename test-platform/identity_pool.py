@@ -7,6 +7,7 @@ the selected pack's data file.
 from __future__ import annotations
 
 import json
+import re
 import os
 import tempfile
 import hashlib
@@ -113,6 +114,10 @@ def validate_pool(data: dict) -> dict:
     password = pool.get("settings", {}).get("default_password")
     if password is not None and not isinstance(password, str):
         raise ValueError("账号池 settings.default_password 必须是字符串")
+    for row, key in [(pool.get("settings", {}), "default_password_ref"),
+                     *((row, "password_ref") for row in pool["identities"])]:
+        if key in row and (not isinstance(row[key], str) or not re.fullmatch(r"env:[A-Z][A-Z0-9_]*", row[key])):
+            raise ValueError("密码引用须为 env:UPPERCASE_KEY")
     try:
         json.dumps(pool, allow_nan=False)
     except (ValueError, TypeError) as exc:
@@ -246,8 +251,19 @@ def default_password(*, pack_id: str | None = None) -> str | None:
     settings = load_pool(pack_id=pack_id).get("settings")
     if not isinstance(settings, dict):
         return None
+    if settings.get("default_password_ref"):
+        return _password_reference(settings["default_password_ref"])
     value = settings.get("default_password")
     return value if isinstance(value, str) and value.strip() else None
+
+
+def _password_reference(reference):
+    if not isinstance(reference, str) or not re.fullmatch(r"env:[A-Z][A-Z0-9_]*", reference):
+        raise ValueError("密码引用须为 env:UPPERCASE_KEY")
+    value = os.environ.get(reference[4:])
+    if not value:
+        raise IdentityUnavailable("identity", "password_ref", reason="密码引用未配置")
+    return value
 
 
 def identity_with_password(identity: dict, *, pack_id: str | None = None) -> dict:
@@ -255,7 +271,10 @@ def identity_with_password(identity: dict, *, pack_id: str | None = None) -> dic
     if not isinstance(identity, dict) or not identity_active(identity):
         raise IdentityUnavailable("identity", "login_identity")
     resolved = deepcopy(identity)
-    password = resolved.get("password")
+    password = (_password_reference(resolved["password_ref"]) if resolved.get("password_ref")
+                else resolved.get("password"))
+    if password:
+        resolved["password"] = password
     if not isinstance(password, str) or not password.strip():
         password = None
     if not password and resolved.get("category") in requirements(pack_id)["password_default_categories"]:
@@ -507,14 +526,20 @@ def redact_secrets(value):
             key: redact_secrets(item)
             for key, item in value.items()
             if "".join(c for c in str(key).casefold() if c.isalnum()) not in {
-                "password", "defaultpassword", "passwordhash", "paypassword", "passwd", "secret", "token",
+                "password", "defaultpassword", "passwordref", "defaultpasswordref", "passwordhash", "paypassword", "passwd", "secret", "token",
                 "credential", "apikey", "apisecret", "accesskey", "accesskeyid", "secretaccesskey",
                 "clientsecret", "accesstoken", "refreshtoken", "authorization", "privatekey",
                 "mfasecret", "otpsecret", "totpsecret",
             }
         }
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [redact_secrets(item) for item in value]
+    if isinstance(value, str):
+        value = re.sub(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+", r"\1 [redacted]", value)
+        value = re.sub(
+            r"(?i)(\b(?:password|passwd|token|access_token|refresh_token|api_key|client_secret|secret)\b"
+            r"[\"']?\s*[:=]\s*[\"']?)([^\s,;\"'&}]+)", r"\1[redacted]", value)
+        return re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "[redacted]", value)
     return value
 
 
@@ -651,7 +676,8 @@ def panel_snapshot(pack_id: str | None = None) -> dict:
         key = category['id'] if category['storage'] == 'identities' else ('scenario' if category['storage'] == 'scenarios' else 'fixture')
         visible[category['id']] = {**categories.get(key, {}), 'label': category['label'], 'storage': category['storage']}
     return {**definition, "version": pool.get("version", POOL_VERSION), "categories": visible,
-            "settings": {"default_password_configured": bool((pool.get("settings") or {}).get("default_password"))},
+            "settings": {"default_password_configured": bool((pool.get("settings") or {}).get("default_password")
+                                                              or (pool.get("settings") or {}).get("default_password_ref"))},
             "maintenance": maintenance}
 
 

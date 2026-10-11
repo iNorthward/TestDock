@@ -41,7 +41,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TP = ROOT / "test-platform"
-for sub in ("order", "guess", "common"):
+for sub in ("common",):
     sys.path.insert(0, str(TP / sub))
 sys.path.insert(0, str(TP))
 

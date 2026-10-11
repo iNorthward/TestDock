@@ -18,6 +18,18 @@ import check_case_doc_sync as docs
 
 class TargetedRegressionTests(unittest.TestCase):
 
+    def test_combined_groups_cannot_accidentally_execute_every_unittest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "tests").mkdir()
+            for name in ("test_one", "test_two"):
+                (root / "tests" / (name + ".py")).write_text("")
+            with patch.object(gate, "ROOT", root), patch.object(gate, "POLICY_ROOT", root), \
+                    patch("offline_process.execute") as run:
+                with self.assertRaisesRegex(ValueError, "禁止全量执行"):
+                    gate.execute_plan({"python": ["test_one", "test_two"], "unmappedSources": []})
+                run.assert_not_called()
+
     def test_unregistered_contract_resource_blocks_instead_of_running_zero_tests(self):
         groups=gate.load_groups()
         for relative in ("resources/new-contract.json","resources/new-contract.yaml","resources/new-schema.sql"):

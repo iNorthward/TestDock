@@ -5,7 +5,13 @@ from pathlib import Path
 sys.path[:0] = [str(Path(__file__).resolve().parents[1]), str(Path(__file__).resolve().parents[1] / "test-platform")]
 from pack_registry import load_pack_tool_module
 
-_implementation = load_pack_tool_module("scan_orphan_test_data")
+try:
+    _implementation = load_pack_tool_module("scan_orphan_test_data")
+except ValueError as exc:
+    if __name__ == "__main__":
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(2)
+    raise
 if __name__ == "__main__":
     raise SystemExit(_implementation.main())
 sys.modules[__name__] = _implementation

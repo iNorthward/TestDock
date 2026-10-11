@@ -4,6 +4,13 @@ from __future__ import annotations
 import argparse,json,os,subprocess,sys,tempfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
+
+class SmokeCaseUnavailable(ValueError):
+    """Catalog loaded successfully, but the requested SAFE smoke ID is invalid."""
+    def __init__(self, detail, available):
+        self.available = list(available)
+        super().__init__(detail+'；可用 SAFE ID：'+(', '.join(self.available) or '无'))
+
 WORKER=r"""
 import json,socket,sys
 from pathlib import Path
@@ -24,7 +31,15 @@ if len(sys.argv)>2:
     identifier=sys.argv[2]
     cases=snapshot.get('cases',[])
     row=next((c for c in cases if c['id']==identifier),None)
-    if not row or row.get('mode')!='safe':raise RuntimeError('Smoke case must exist and be SAFE')
+    if not row:
+        result['mockError']='案例不存在：'+identifier
+        result['availableSafeIds']=[c['id'] for c in cases if c.get('mode')=='safe']
+    elif row.get('mode')!='safe':
+        result['mockError']='Smoke case must be SAFE: '+identifier
+        result['availableSafeIds']=[c['id'] for c in cases if c.get('mode')=='safe']
+    if result.get('mockError'):
+        print(json.dumps(result,ensure_ascii=False))
+        sys.exit(0)
     output=catalog.exec_case(identifier)
     if output.get('status')!='passed' or output.get('ok') is not True:raise RuntimeError('Smoke case did not pass: '+str(output))
     result['mockPassed']=identifier
@@ -41,8 +56,11 @@ def verify(pack_id,*,smoke=None,root=ROOT):
         args=[sys.executable,*flags,'-c',WORKER,str(Path(root).resolve())]+([smoke] if smoke else [])
         proc=subprocess.run(args,cwd=root,env=env,text=True,capture_output=True,timeout=60)
         if proc.returncode:raise RuntimeError(proc.stderr.strip() or proc.stdout.strip())
-        return json.loads(proc.stdout.strip().splitlines()[-1])
+        result=json.loads(proc.stdout.strip().splitlines()[-1])
+        if result.get('mockError'):
+            raise SmokeCaseUnavailable(result['mockError'],result.get('availableSafeIds',[]))
+        return result
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--pack',required=True);p.add_argument('--mock-smoke',action='store_true');p.add_argument('--case-id',default='DEMO-R01');a=p.parse_args()
-    try:print(json.dumps(verify(a.pack,smoke=a.case_id if a.mock_smoke else None),ensure_ascii=False,indent=2))
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--pack',required=True);p.add_argument('--mock-smoke',action='store_true');p.add_argument('--case-id');a=p.parse_args()
+    try:print(json.dumps(verify(a.pack,smoke=(a.case_id or ('DEMO-R01' if a.pack=='demo_pack' else a.pack.upper()+'-R01')) if a.mock_smoke else None),ensure_ascii=False,indent=2))
     except (ValueError,RuntimeError,subprocess.TimeoutExpired) as e:p.exit(2,str(e)+'\n')

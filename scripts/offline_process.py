@@ -36,8 +36,11 @@ def system_command(command, profile):
         # real data. Bubblewrap supplies a read-only root and private temp space.
         context=json.loads((profile.parent/'context.json').read_text())
         arguments=['bwrap','--die-with-parent','--unshare-net','--ro-bind','/','/',
-                   '--tmpfs','/tmp','--bind',str(profile.parent),str(profile.parent),
-                   '--proc','/proc','--dev','/dev']
+                   '--tmpfs','/tmp']
+        for value in sorted(context['protected_roots'], key=lambda item: len(Path(item).parts)):
+            arguments.extend(['--ro-bind',value,value])
+        arguments.extend(['--bind',str(profile.parent),str(profile.parent),
+                   '--proc','/proc','--dev','/dev'])
         for value in context['protected_reads']:
             if Path(value).is_file():
                 arguments.extend(['--ro-bind','/dev/null',value])
@@ -53,7 +56,7 @@ def execute(root, plan, *, fixtures=None, inputs=None):
     roots=sorted({str(Path(root).resolve()),str(CODE_ROOT.resolve())})
     pool=(pack['root']/str(pack.get('identity_pool_file') or 'data/identity_pool.json')).resolve()
     protected_reads=sorted({str(pool),str((CODE_ROOT/'.env.local').resolve()),str(configured_env_file().resolve())}-{'/dev/null'})
-    python_result={'testsRun':0,'failures':0,'errors':0,'ok':True}
+    python_result={'testsRun':0,'failures':0,'errors':0,'skipped':0,'ok':True}
     node=None
     with tempfile.TemporaryDirectory(prefix='platform-offline-') as temporary:
         directory=Path(temporary).resolve()

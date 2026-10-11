@@ -122,7 +122,7 @@ def main():
     skipped = [c.get("id", "?") for c in cases if c.get("status") == "skipped"]
     incomplete = [c.get("id", "?") for c in cases if c.get("status") == "incomplete"]
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    head = (f"PLATFORM 回归 #{run_id} [{stamp}] SAFE 通过 {counts['passed']}/{total}，"
+    head = (f"TestDock 回归 #{run_id} [{stamp}] SAFE 通过 {counts['passed']}/{total}，"
             f"失败 {counts['failed']}，跳过 {counts['skipped']}，未完成 {counts['incomplete']}，"
             f"耗时 {dur_ms/1000:.1f}s")
     print(head)

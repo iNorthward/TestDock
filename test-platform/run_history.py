@@ -15,6 +15,7 @@ import json
 import sqlite3
 import threading
 import time
+from contextlib import contextmanager
 from case_result_status import normalize_case_result, summarize_cases
 from project_paths import runtime_data_path
 from identity_pool import redact_secrets
@@ -22,6 +23,7 @@ from identity_pool import redact_secrets
 DB_PATH = runtime_data_path("run_history.db")
 _LOCK = threading.Lock()
 _SCHEMA_LOCK = threading.Lock()
+_SCHEMA_FILES = set()
 MAX_HISTORY_LIMIT = 500
 MAX_HISTORY_WINDOW = 500
 MAX_SUMMARY_DAYS = 3650
@@ -114,29 +116,31 @@ def _migrate(conn):
         )
 
 
+@contextmanager
 def _conn():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH), timeout=10)
     conn.row_factory = sqlite3.Row
     try:
         with _SCHEMA_LOCK:
-            # Serialize schema inspection and ALTER TABLE across processes.
-            # executescript commits before running, so begin the transaction
-            # inside the script and commit only after migration completes.
-            conn.executescript("BEGIN IMMEDIATE;\n" + _SCHEMA)
-            _migrate(conn)
-            conn.commit()
-    except Exception:
+            stat = DB_PATH.stat()
+            identity = (str(DB_PATH.resolve()), stat.st_dev, stat.st_ino)
+            if identity not in _SCHEMA_FILES or stat.st_size == 0:
+                conn.executescript("BEGIN IMMEDIATE;\n" + _SCHEMA)
+                _migrate(conn)
+                conn.commit()
+                _SCHEMA_FILES.add(identity)
+        with conn:
+            yield conn
+    finally:
         conn.close()
-        raise
-    return conn
 
 
 def validate_history_parameter(value, *, name, maximum):
     """Validate bounded positive history query parameters before constructing SQL."""
     if type(value) is int:
         parsed = value
-    elif (isinstance(value, str) and 1 <= len(value) <= 10
+    elif (isinstance(value, str) and 1 <= len(value) <= len(str(maximum))
           and value.isascii() and value.isdecimal()):
         parsed = int(value)
     else:
@@ -195,7 +199,7 @@ def record_run(result, source="panel", duration_ms=None, metadata=None):
             [
                 (run_id, c.get("id", "?"), 1 if c.get("status") == "passed" else 0,
                  c.get("status", "failed"),
-                 json.dumps(c.get("subs") or [], ensure_ascii=False), now,
+                 json.dumps(redact_secrets(c.get("subs") or []), ensure_ascii=False), now,
                  c.get("durationMs"))
                 for c in cases
             ],
@@ -226,11 +230,12 @@ def recent_runs(limit=50):
 
 def _run_row(row):
     out = dict(row)
-    out["executionMetadata"] = json.loads(out.pop("metadata_json", "{}"))
+    out["executionMetadata"] = redact_secrets(json.loads(out.pop("metadata_json", "{}")))
     return out
 
 
 def run_detail(run_id):
+    run_id = validate_history_parameter(run_id, name="id", maximum=9223372036854775807)
     with _conn() as conn:
         run = conn.execute("SELECT * FROM runs WHERE id=?", (int(run_id),)).fetchone()
         if not run:
@@ -241,8 +246,8 @@ def run_detail(run_id):
         ).fetchall()
     out = _run_row(run)
     out["cases"] = [
-        {"id": c["case_id"], "ok": c["status"] == "passed", "status": c["status"],
-         "subs": json.loads(c["subs_json"] or "[]"),
+        {"id": c["case_id"], "ok": True if c["status"] == "passed" else False if c["status"] == "failed" else None, "status": c["status"],
+         "subs": redact_secrets(json.loads(c["subs_json"] or "[]")),
          "durationMs": c["duration_ms"]}
         for c in cases
     ]
@@ -259,10 +264,10 @@ def case_history(case_id, limit=20):
             (case_id, limit),
         ).fetchall()
     return [
-        {"ts": r["ts"], "ok": r["status"] == "passed", "status": r["status"],
+        {"ts": r["ts"], "ok": True if r["status"] == "passed" else False if r["status"] == "failed" else None, "status": r["status"],
          "source": r["source"], "mode": r["mode"],
-         "durationMs": r["duration_ms"], "subs": json.loads(r["subs_json"] or "[]"),
-         "executionMetadata": json.loads(r["metadata_json"] or "{}")}
+         "durationMs": r["duration_ms"], "subs": redact_secrets(json.loads(r["subs_json"] or "[]")),
+         "executionMetadata": redact_secrets(json.loads(r["metadata_json"] or "{}"))}
         for r in rows
     ]
 

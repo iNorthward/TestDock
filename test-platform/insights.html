@@ -356,9 +356,8 @@ async function loadCaseIndex(){
   }catch(e){console.warn('catalog lite',e);}
 }
 
-// Core diagnostics remain discoverable before a project supplies their inputs.
-// Pack capabilities control optional business services, not these built-in pages.
-const allowedTabs=new Set(['env-preflight','inspect','coverage','validate','db-inspection','history','flaky']);
+// Optional diagnostics require the selected Pack capability.
+const allowedTabs=new Set(['env-preflight','validate','history','flaky']);
 function switchTab(name){
   if(!allowedTabs.has(name))name='validate';
   if(activeTab==='db-inspection'&&name!=='db-inspection') abortDbInspectionStreams();
@@ -477,7 +476,7 @@ function renderDbInspectionTab(cached){
     badge:'检测 · 只读',
     variant:'readonly',
   });
-  intro.bd.innerHTML=`<div class="ins-banner"><div class="split"><div class="col"><b>✓ 按钮负责</b>发现表结构变更、影响面扫描</div><div class="col"><b>→ Cursor Agent 负责</b>按报告修复代码、写入本地 schema 缓存、再跑 SAFE</div></div></div>
+  intro.bd.innerHTML=`<div class="ins-banner"><div class="split"><div class="col"><b>✓ 按钮负责</b>发现表结构变更、影响面扫描</div><div class="col"><b>→ 接入 Agent 负责</b>按报告修复代码、写入本地 schema 缓存、再跑 SAFE</div></div></div>
     <div class="ins-actions"><button class="btn-sync" id="btnRunDbInspection">开始巡检</button></div>`;
   $('#btnRunDbInspection').onclick=()=>runDbPatrol();
   updateDbInspectionActionButtons();
@@ -598,7 +597,7 @@ async function runDbPatrol(){
   resultWrap.innerHTML='<div class="ins-empty-state">巡检进行中，完成后在此展示对比结果与 Agent 提示。</div>';
 
   if(dbPatrolEs){dbPatrolEs.close();dbPatrolEs=null;}
-  dbPatrolEs=new EventSource('/api/db-schema/patrol-stream');
+  dbPatrolEs=TestDockSecurity.postEvents('/api/db-schema/patrol-stream');
 
   dbPatrolEs.onmessage=function(event){
     try{
@@ -624,7 +623,7 @@ async function runDbPatrol(){
   };
 
   dbPatrolEs.onerror=function(err){
-    console.error('EventSource error',err);
+    console.error('Inspection stream error',err);
     if(dbPatrolEs){dbPatrolEs.close();dbPatrolEs=null;}
     dbPatrolRunning=false;
     hideDbPatrolProgress();
@@ -722,7 +721,7 @@ function renderSchemaPatrolResult(result,target){
     const agent=el('div','ins-agent');
     agent.style.marginTop='16px';
     const reportHint=result.impactReportPath?`<div class="muted" style="font-size:12px;margin-bottom:8px">完整报告：<code>${esc(result.impactReportPath)}</code></div>`:'';
-    agent.innerHTML=`<div class="ins-agent-title">下一步：在 Cursor Agent 中处理</div><div class="ins-agent-desc">Schema 变更会影响 SQL / FIELD_MAP / 对账断言 / 面板工具。复制下方提示词交给 Agent；提示词已包含代码修复与 <code>sync_db_schema.py</code> 写入本地缓存，无需手动点按钮。</div>${reportHint}<div class="ins-agent-prompt"><pre id="db-agent-prompt-pre">${esc(result.agentPrompt)}</pre><button type="button" class="btn-ghost" id="btnCopyDbAgent">复制</button></div>`;
+    agent.innerHTML=`<div class="ins-agent-title">下一步：交给接入 Agent 处理</div><div class="ins-agent-desc">Schema 变更会影响 SQL / FIELD_MAP / 对账断言 / 面板工具。复制下方提示词交给 Agent；提示词已包含代码修复与 <code>sync_db_schema.py</code> 写入本地缓存，无需手动点按钮。</div>${reportHint}<div class="ins-agent-prompt"><pre id="db-agent-prompt-pre">${esc(result.agentPrompt)}</pre><button type="button" class="btn-ghost" id="btnCopyDbAgent">复制</button></div>`;
     box.append(agent);
     const copyBtn=$('#btnCopyDbAgent');
     if(copyBtn) copyBtn.onclick=function(){copyText(result.agentPrompt,this);};
@@ -1015,7 +1014,7 @@ function storeInspect(j){
 
 function agentPromptText(j){
   const report=j&&j.reportPath?j.reportPath:'（报告路径未由当前 Pack 配置）';
-  const lines=['请根据 Apifox 巡检报告处理待办（读 MCP 契约详情后编写/修复用例）：','',`报告：${report}`];
+  const lines=['请根据 Apifox 巡检报告处理待办（读取项目契约详情后编写/修复用例）：','',`报告：${report}`];
   const audit=j&&j.audit;
   const removed=(audit&&audit.removedFromApifoxDetail)||[];
   if(removed.length){
@@ -1388,7 +1387,7 @@ function renderInspectTab(){
     badge:'检测 · 报告',
     variant:'ops',
   });
-  intro.bd.innerHTML=`<div class="ins-banner"><div class="split"><div class="col"><b>✓ 按钮负责</b>发现 Apifox 变更、覆盖缺口、用例 FAIL 清单</div><div class="col"><b>→ Cursor Agent 负责</b>读 MCP 契约、编写/修复 <code>*_cases.py</code> 与文档</div></div></div>
+  intro.bd.innerHTML=`<div class="ins-banner"><div class="split"><div class="col"><b>✓ 按钮负责</b>发现 Apifox 变更、覆盖缺口、用例 FAIL 清单</div><div class="col"><b>→ 接入 Agent 负责</b>读取项目契约、编写/修复 <code>*_cases.py</code> 与文档</div></div></div>
     <div class="ins-actions"><label><input type="checkbox" id="insSkipSafe" checked> 跳过 SAFE（约 1 分钟，仅检测 + 报告）</label></div>`;
   const btn=el('button','btn-sync');
   btn.textContent=inspectRunning?'生成中…':'生成巡检报告';
@@ -1553,7 +1552,7 @@ function renderInspectResult(j){
 
   const agent=el('div','ins-agent');
   const prompt=agentPromptText(j);
-  agent.innerHTML=`<div class="ins-agent-title">下一步：在 Cursor Agent 中处理</div><div class="ins-agent-desc">补用例、修 FAIL、对契约 diff 需 MCP <code>read_project_oas_ref_resources_*</code>。可复制下方提示词直接粘贴。</div><div class="ins-agent-prompt"><pre id="agent-prompt-pre">${esc(prompt)}</pre><button type="button" class="btn-ghost" id="btnCopyAgent">复制</button></div>`;
+  agent.innerHTML=`<div class="ins-agent-title">下一步：交给接入 Agent 处理</div><div class="ins-agent-desc">补用例、修 FAIL、对契约 diff 需 MCP <code>read_project_oas_ref_resources_*</code>。可复制下方提示词直接粘贴。</div><div class="ins-agent-prompt"><pre id="agent-prompt-pre">${esc(prompt)}</pre><button type="button" class="btn-ghost" id="btnCopyAgent">复制</button></div>`;
   wrap.append(agent);
   $('#btnCopyAgent').onclick=function(){copyText(prompt,this);};
 
@@ -2569,7 +2568,7 @@ function runErrorLogAudit(){
 
   const url='/api/error-log/run-stream?env='+encodeURIComponent(errorLogEnv)
     +'&from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to);
-  errorLogEs=new EventSource(url);
+  errorLogEs=TestDockSecurity.getEvents(url);
   errorLogEs.onmessage=async (ev)=>{
     let data;
     try{data=JSON.parse(ev.data);}catch(e){return;}

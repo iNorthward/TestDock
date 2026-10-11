@@ -83,5 +83,7 @@
   "test-platform/history_compare.py",
   "test-platform/execution_queue.py",
   "scripts/isolated_case_worker.py",
-  "test-platform/isolated_runner.py"
+  "test-platform/isolated_runner.py",
+  "test-platform/http_security.py",
+  "scripts/pack_tool.py"
 ]

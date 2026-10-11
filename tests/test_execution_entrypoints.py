@@ -50,10 +50,11 @@ class ExecutionEntrypointsTests(unittest.TestCase):
         runner.assert_called_once()
 
     def test_panel_retry_keeps_one_history_row_and_conflicting_params_return_409(self):
-        body={"id":"S-L01","requestId":"request-1","orderOptions":{"volume":"0.01"}}
+        body={"id":"S-L01","requestId":"request-1","confirmLive":"S-L01","orderOptions":{"volume":"0.01"}}
         with patch.object(server.cat,"_CAT",{"S-L01":{"suite":"synthetic","mode":"live"}}), \
              patch.object(server.cat,"exec_case",return_value={"id":"S-L01","ok":True}) as run, \
-             patch.object(server.rh,"record_case",return_value=42) as record:
+             patch.object(server.rh,"record_case",return_value=42) as record, \
+             patch.dict(server.os.environ,{"PLATFORM_ALLOW_LIVE":"1"}):
             one=FakePostHandler("/api/run-case",body)
             one.do_POST()
             two=FakePostHandler("/api/run-case",body)
@@ -69,6 +70,7 @@ class ExecutionEntrypointsTests(unittest.TestCase):
     def test_batch_retry_is_deduplicated_and_history_failure_is_persisted_without_replay(self):
         body={"suite":"synthetic","requestId":"batch-1"}
         with patch.object(server.cat,"run_all",return_value={"ok":True,"cases":[]}) as run, \
+             patch.object(server.cat,"SUITES",[{"id":"synthetic"}]), \
              patch.object(server.rh,"record_run",side_effect=OSError("synthetic disk full")) as record, \
              self.assertLogs(server.__name__,level="ERROR"):
             one=FakePostHandler("/api/run",body)
@@ -91,7 +93,7 @@ class ExecutionEntrypointsTests(unittest.TestCase):
         for path, status in (("/api/execution/job", 400), ("/api/execution/job?id=missing", 404),
                              (f"/api/execution/job?id={job['id']}", 200)):
             handler = FakePostHandler(path, {})
-            server.H.do_GET(handler)
+            server.H._dispatch_GET(handler)
             self.assertEqual(handler.responses[0][0], status)
         cancel = FakePostHandler("/api/execution/cancel", {"id": job["id"]})
         cancel.do_POST()

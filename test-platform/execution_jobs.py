@@ -310,11 +310,9 @@ def start_background_job(*, kind, request_id=None, payload, operation,
 
 def run_idempotent(*, kind, request_id, payload, operation, metadata=None, timeout_seconds=1200):
     """Return the stored result or a pending state; never replay an old request."""
+    from execution_queue import QueueFull
     if request_id is None:
-        from execution_queue import QueueFull
-        try:
-            with get_executor().synchronous_slot():return operation()
-        except QueueFull as exc:return {'ok':None,'status':'incomplete','error':str(exc)}
+        request_id = uuid.uuid4().hex
     store = get_store()
     job, created = store.create(kind=kind, metadata=metadata, request_key=request_id,
                                 fingerprint=request_fingerprint(payload), timeout_seconds=timeout_seconds)

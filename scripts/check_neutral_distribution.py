@@ -25,4 +25,4 @@ def findings(root=ROOT):
     return result
 if __name__=='__main__':
     a=argparse.ArgumentParser(description=__doc__);a.add_argument('--json',action='store_true');args=a.parse_args();items=findings()
-    print(json.dumps({'ok':not items,'findings':items,'scope':'distributed text and documentation links; excludes local IDE, runtime, secrets, Git metadata'},ensure_ascii=False,indent=2));raise SystemExit(bool(items))
+    print(json.dumps({'ok':not items,'findings':items,'scope':'source identity keywords and documentation links only; excludes local IDE, runtime, secrets, Git metadata', 'limitations':['Keyword scan does not prove semantic neutrality or provider independence']},ensure_ascii=False,indent=2));raise SystemExit(bool(items))

@@ -14,7 +14,7 @@ def business_env_key(value):
     return value
 
 def pack_readme(pack_id,port,contract):
-    smoke='HTTP-MOCK-R01' if contract else 'DEMO-R01'
+    smoke='HTTP-MOCK-R01' if contract else pack_id.upper()+'-R01'
     text=(f'# {pack_id} 接入说明\n\n'
           '所有命令从测试平台根目录运行。当前目录仅归所属业务项目所有；不修改 Core。\n\n'
           '## 离线验收\n\n```sh\n'
@@ -31,7 +31,7 @@ def pack_readme(pack_id,port,contract):
                '复杂认证、响应信封、序列化和业务断言放本 Pack integration.py / helpers，注册案例在 cases/readonly_cases.py。\n\n')
     else:
         text+=('## 替换离线骨架\n\n'
-               '当前 DEMO-R01 仅使用 transport.py 的本地 mock。真实认证与响应信封在 __init__.py 注册，'
+               f'当前 {smoke} 仅使用 transport.py 的本地 mock。真实认证与响应信封在 __init__.py 注册，'
                '请求和业务断言放本 Pack Adapter / helpers，新增案例在 cases/readonly_cases.py。'
                '没有确认的接口证据时保留 incomplete，不猜字段或默认账号。\n\n')
     text+=('## 独立启动与停止\n\n'
@@ -98,8 +98,9 @@ def create(pack_id,name,port,*,root=ROOT,contract_file=None):
         stage=Path(tmp)/pack_id;stage.mkdir();(stage/'cases').mkdir();(stage/'cases/__init__.py').write_text('')
         source=root/'examples/demo_pack'
         for filename in ('__init__.py','transport.py'):
-            shutil.copyfile(source/filename,stage/filename)
-        text=(source/'readonly_cases.py').read_text().replace('examples.demo_pack','packs.'+pack_id)
+            adapter=(source/filename).read_text().replace('Demo', ''.join(part.title() for part in pack_id.split('_'))).replace('x-demo-', 'x-'+pack_id.replace('_','-')+'-')
+            (stage/filename).write_text(adapter)
+        text=(source/'readonly_cases.py').read_text().replace('examples.demo_pack','packs.'+pack_id).replace('DEMO-R01',pack_id.upper()+'-R01').replace('demo-readonly',pack_id+'-readonly').replace('demo-tenant',pack_id+'-tenant').replace('demo-reader',pack_id+'-reader').replace('https://demo.invalid','https://'+pack_id.replace('_','-')+'.invalid').replace('Demo ·',name+' ·')
         (stage/'cases/readonly_cases.py').write_text(text)
         manifest={'platform_api':{'min':'1.0','max_exclusive':'2.0','features':['request_id']},'id':pack_id,'display_name':name,'default':False,'bootstrap':'packs.'+pack_id+':install',
             'case_dirs':[str(Path('packs')/pack_id/'cases')],'navigation':[{'id':'demo','name':'离线接入验收','parents':['demo']}],

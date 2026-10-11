@@ -4,7 +4,7 @@
 
 ## 快速体验
 
-需要 Python 3.9+；JavaScript 回归需要 Node.js 18+。离线 demo 无需数据库或真实账号。
+支持 macOS 与 Linux；Windows 当前不支持（文件锁和进程隔离依赖 POSIX）。需要 Python 3.9+；JavaScript 回归需要 Node.js 20+。离线 demo 无需数据库或真实账号。
 
 ```sh
 test -f .env.local || cp .env.example .env.local
@@ -16,6 +16,8 @@ test -f .env.local || cp .env.example .env.local
 默认打开 http://localhost:8801/，选择 DEMO-R01 运行本地 mock。`/insights?tab=history` 查看运行历史。配置在本项目 `.env.local`，示例在 `.env.example`。每个 Pack 使用独立数据目录、环境文件和端口。
 
 ## 接入项目
+
+首次使用可先读 [面向维护者的上手说明](docs/onboarding/HUMAN_QUICKSTART.md)。
 
 Agent 从 [快速接入入口](docs/onboarding/QUICKSTART.md) 与 [完整接入手册](docs/onboarding/AGENT_INTEGRATION.md) 开始，执行以下命令生成一个独立的离线项目骨架：
 
@@ -43,6 +45,14 @@ PLATFORM_ENV_FILE=/dev/null python3 scripts/targeted_regression.py --group onboa
 
 案例结果：passed 为通过，failed 为失败，incomplete 为缺条件未完成；mock 与真实业务验证分开记录。项目历史、任务和资源目录独立。发行只包含平台源码、通用资产、说明和合成样例，不复制环境凭据、运行库或 Git 历史。
 
+## 当前限制
+
+Pack 目前只能从平台仓库内的 `packs/<id>` 装载，尚不支持外部目录直接装载及原子升级。默认时区固定为 `Asia/Shanghai`。Core 内置契约拉取和数据库巡检分别面向 Apifox 与 MySQL；其他来源须由 Pack 自行适配，目前没有统一的多供应商插件接口。
+
+本项目按本机 macOS 定向验收，不配置远端 CI。用例文件变更会在执行空闲时自动重载；长批次期间目录仍可读取，界面显示待重载提示，正在执行的案例保持当前注册表；手动重载忙时返回 409，稍后重试。认证 token 的过期与跨线程登录复用由 Pack 的 TokenProvider 管理，Core 不假设 token 的有效期。
+
+本地一键检查用显式定向组，例如 `bash scripts/check.sh --group execution --group execution-ui`。宽范围 `--changed` 若叠加成全部单测会返回 2，须拆成受影响的定向组；当前检查入口不承诺一次执行全部工作区改动的测试。
+
 ## 架构说明
 
 [平台架构白皮书](docs/architecture/TEST_PLATFORM_ARCHITECTURE.md) 说明当前 Core / Pack / Adapter 边界、接入与执行协议、发行和验证范围。
@@ -63,3 +73,9 @@ python3 scripts/project_tasks.py --pack sample_app init --require-real
 项目展示名为 TestDock，本地目录名为 testDock；仓库地址为 https://github.com/iNorthward/TestDock。Git 用于源码版本管理，不是平台启动或业务接入的前置依赖。
 
 历史验收报告记录各次验证时的快照，其中“无 Git”证明平台可以脱离仓库元数据运行，不表示当前开发目录禁止初始化 Git。发行工具继续排除 Git 元数据、凭据和运行数据。
+
+## 面板请求保护
+
+面板仅监听回环地址。页面自动获取进程会话 token，API 请求须带 `X-TestDock-Token`；脚本先同源读取 `/api/session`。非同源 Origin/Referer、非法 Host 和非 JSON POST 会被拒绝，请求体上限 1 MiB。LIVE 同时要求启动环境显式设置 `PLATFORM_ALLOW_LIVE=1`，请求 `confirmLive` 等于案例 ID 或 suite；不指定 suite 时等于 `all`。原有 Pack 的逐例写入授权仍然有效。服务重启后刷新页面获取新 token。
+
+运行 `bash scripts/check.sh` 执行静态门禁及变更影响的离线回归；真实 HTTP 安全测试和双项目模拟验收独立执行。选测组叠加覆盖全部 Python 测试模块时，门禁会拒绝执行，应缩小 `--group` / `--file` 范围，不能把自动选择当作全量执行授权。发行 SHA-256 收据只由 `export_platform.py` 在导出目录生成，源码目录不维护过期收据。资源池可用 `password_ref: "env:MY_PASSWORD"`，默认密码可用 `settings.default_password_ref`；引用未配置时明确报未完成，不静默回退明文密码。

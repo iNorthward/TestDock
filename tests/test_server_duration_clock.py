@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import types
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -14,12 +15,14 @@ import server  # noqa: E402
 
 
 class FakePostHandler:
-    do_POST = server.H.do_POST
+    do_POST = server.H._dispatch_POST
 
     def __init__(self, path, body):
         self.path = path
         self.body = body
         self.responses = []
+
+    _diagnostic_allowed = lambda self, path: True
 
     def _body(self):
         return self.body
@@ -29,6 +32,13 @@ class FakePostHandler:
 
 
 class ServerDurationClockTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        mocked = patch.object(server.jobs, "get_store", return_value=server.jobs.JobStore(Path(directory.name) / "jobs.db"))
+        mocked.start()
+        self.addCleanup(mocked.stop)
+
     def test_history_save_failure_is_visible_and_does_not_repeat_runner(self):
         case = {"id": "K-R01", "ok": True, "status": "passed", "subs": [{"ok": True}]}
         handler = FakePostHandler("/api/run-case", {"id": "K-R01"})
@@ -41,7 +51,7 @@ class ServerDurationClockTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["status"], "passed")
         self.assertFalse(result["historySaved"])
-        self.assertEqual(result["historyError"], "disk full")
+        self.assertEqual(result["historyError"], "历史保存失败，请查看服务日志")
         self.assertIn("K-R01", logs.output[0])
         run.assert_called_once()
         record.assert_called_once()
@@ -67,6 +77,7 @@ class ServerDurationClockTests(unittest.TestCase):
 
         with patch.object(server, "time", clock), \
                 patch.object(server.cat, "run_all", return_value=result), \
+                patch.object(server.cat, "SUITES", [{"id": "demo"}]), \
                 patch.object(server.rh, "record_run", record):
             handler.do_POST()
 
@@ -78,7 +89,7 @@ class ServerDurationClockTests(unittest.TestCase):
             "id": "K-R01", "ok": True,
             "subs": [{"ok": True, "status": "passed", "detail": "pass"}],
         }
-        record = Mock()
+        record = Mock(return_value=1)
         handler = FakePostHandler("/api/run-case", {"id": "K-R01"})
         clock = types.SimpleNamespace(monotonic=Mock(side_effect=[50.0, 50.5]))
 

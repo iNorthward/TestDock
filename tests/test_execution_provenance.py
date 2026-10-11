@@ -1,3 +1,4 @@
+from contextlib import closing
 import json
 import sys
 import tempfile
@@ -106,7 +107,7 @@ class ExecutionProvenanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch.object(history,"DB_PATH",Path(directory)/"history.db"):
             # Build the old schema by omitting the new column; exercise ALTER.
             import sqlite3
-            with sqlite3.connect(history.DB_PATH) as conn:
+            with closing(sqlite3.connect(history.DB_PATH)) as conn, conn:
                 conn.executescript(history._SCHEMA.replace(",\n    metadata_json TEXT NOT NULL DEFAULT '{}'",""))
                 conn.execute("INSERT INTO runs(ts,mode,source,passed,total,status) VALUES (1,'safe','legacy',0,0,'incomplete')")
             meta={"packId":"sample","codeFingerprint":"abc","contractFingerprints":{"wire":"def"},

@@ -55,14 +55,15 @@ def run_acceptance():
                         tail=Path(log.name).read_text()[-1800:]
                         raise RuntimeError('Acceptance panel startup failed: '+tail)
                     try:
-                        with OPENER.open(url+'/api/platform',timeout=1) as response:
-                            if json.load(response)['data']['pack']==pack:return process,url
+                        if api(url,'/api/platform')['pack']==pack:return process,url
                     except (OSError,ValueError):time.sleep(.1)
                 log.flush()
                 raise TimeoutError('Acceptance panel did not become ready: '+Path(log.name).read_text()[-1800:])
             def api(url,path,payload=None):
+                with OPENER.open(url+'/api/session',timeout=2) as response:
+                    session_token=json.load(response)['token']
                 request=urllib.request.Request(url+path,data=json.dumps(payload).encode() if payload is not None else None,
-                                              headers={'Content-Type':'application/json'})
+                                              headers={'Content-Type':'application/json','X-TestDock-Token':session_token})
                 with OPENER.open(request,timeout=10) as response:
                     payload=json.load(response)
                     return payload.get('data',payload)
@@ -121,7 +122,7 @@ def run_acceptance():
             compared=api(a,'/api/history/compare?before='+str(result['runId'])+'&after='+str(wrong['runId']))
             check('history comparison observes status and assertion differences',any(row.get('beforeStatus')=='passed' and row.get('afterStatus')=='failed' and row.get('assertionChanges') for row in compared['changes']))
             state['shape']='valid'
-            other=api(b,'/api/run-case',{'id':'DEMO-R01','requestId':'acceptance-beta'})
+            other=api(b,'/api/run-case',{'id':'SERVICE_BETA-R01','requestId':'acceptance-beta'})
             check('second project remains usable',other.get('status')=='passed')
             check('separate runtime histories', (root/'data/service_alpha/run_history.db').is_file() and (root/'data/service_beta/run_history.db').is_file())
             alpha.terminate();alpha.wait(timeout=6)

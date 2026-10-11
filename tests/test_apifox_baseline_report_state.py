@@ -74,6 +74,7 @@ class ApifoxBaselineReportStateTests(unittest.TestCase):
         with patch.object(sys, "argv", ["run_apifox_inspection.py", "--skip-safe", "--json"]), \
                 patch.object(inspection, "REPORT_DIR", reports), \
                 patch.object(inspection, "UNDIGESTED", temp_root / "undigested.json"), \
+                patch.object(inspection, "COVERAGE_JSON", temp_root / "coverage.json"), \
                 patch.object(inspection, "step_a_fetch", return_value=({"skipped": False}, {"downloadTime": "now"})), \
                 patch.object(inspection, "step_b_audit", return_value={"audit": self._audit_result(), "summary": summary}), \
                 patch.object(inspection, "step_c_safe", return_value={"skipped": True, "skippedReason": "cli"}), \

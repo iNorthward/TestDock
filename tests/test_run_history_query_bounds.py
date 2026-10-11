@@ -15,11 +15,13 @@ import server  # noqa: E402
 
 
 class FakeHistoryHandler:
-    do_GET = server.H.do_GET
+    do_GET = server.H._dispatch_GET
 
     def __init__(self, path):
         self.path = path
         self.responses = []
+
+    _diagnostic_allowed = lambda self, path: True
 
     def _json(self, status, payload):
         self.responses.append((status, payload))

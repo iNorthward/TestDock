@@ -25,7 +25,7 @@ PLATFORM_ENV_FILE=.env.sample_app ./start.sh start
 PLATFORM_ENV_FILE=.env.sample_app ./start.sh status
 ```
 
-生成器拒绝覆盖现有 Pack 或环境文件，生成权限 0600 的 `.env.sample_app`。骨架同时生成 tests/test_adapter.py 与 regression.json；可直接运行 PLATFORM_PACKS=sample_app PLATFORM_ENV_FILE=/dev/null python3 scripts/targeted_regression.py --group sample_app.adapter。骨架有离线 TokenProvider、请求头、响应信封、MockTransport 和一条 DEMO-R01。同一 case ID 可以在不同进程的项目中使用；一个项目内部必须唯一。生成器不修改 default demo、不停已有服务、不连接真实业务。
+生成器拒绝覆盖现有 Pack 或环境文件，生成权限 0600 的 `.env.sample_app`。骨架同时生成 tests/test_adapter.py 与 regression.json；可直接运行 PLATFORM_PACKS=sample_app PLATFORM_ENV_FILE=/dev/null python3 scripts/targeted_regression.py --group sample_app.adapter。骨架有离线 TokenProvider、请求头、响应信封、MockTransport 和一条 SAMPLE_APP-R01（ID 为 `<PACK_ID大写>-R01`）。同一 case ID 可以在不同进程的项目中使用；一个项目内部必须唯一。生成器不修改 default demo、不停已有服务、不连接真实业务。
 
 验证器使用干净子进程、/dev/null 环境文件和临时数据，禁止 socket；`--mock-smoke` 只能用于可完全离线的 SAFE 案例。真实案例接入后使用普通 `--pack` 验证装载；若项目 bootstrap 会联网，须先移除 bootstrap 的副作用，将调用放入 runner 或 Adapter 按需方法。
 
@@ -188,10 +188,14 @@ UI 验收：所选 Pack 名称正确、case 列表正确、未声明资源入口
 单条案例使用界面或平台 API，不用 run_all 验收所有业务：
 
 ```sh
-curl -s http://localhost:8802/api/platform
-curl -s http://localhost:8802/api/catalog
-curl -s -H 'Content-Type: application/json' -d '{"id":"DEMO-R01","requestId":"sample-app-offline-001"}' http://localhost:8802/api/run-case
+PANEL_URL=http://localhost:8802
+TOKEN=$(curl -fsS "$PANEL_URL/api/session" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+curl -fsS -H "X-TestDock-Token: $TOKEN" "$PANEL_URL/api/platform"
+curl -fsS -H "X-TestDock-Token: $TOKEN" "$PANEL_URL/api/catalog"
+curl -fsS -H "X-TestDock-Token: $TOKEN" -H 'Content-Type: application/json' -d '{"id":"SAMPLE_APP-R01","requestId":"sample-app-offline-001"}' "$PANEL_URL/api/run-case"
 ```
+
+示例对应新生成的 sample_app 离线骨架，使用内置 demo 时改为 DEMO-R01 和其端口。TOKEN 只保存在当前 shell，不写入报告或配置；服务重启后重新获取。所有其他 `/api/` 调用也须带该请求头。
 
 同一个 requestId 用于同一次操作重试；换 payload 不复用该 ID。案例重试任务按实际返回的 executionId 查询 /api/execution/job?id=<executionId>，取消通过 POST /api/execution/cancel，body 为 {"id":"<id>"}。不把 unknown/incomplete 当成功。上述 API 只演示离线 mock。
 

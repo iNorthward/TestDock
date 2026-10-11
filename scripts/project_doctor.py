@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """One-command selected Pack health report with explicit next actions, no secrets."""
 from __future__ import annotations
-import argparse,json,re,socket,sys
+import argparse,json,re,socket,sys,shlex
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'scripts')]
 from platform_protocol import compatibility
 from timezone_config import parse_env_value
-from verify_project_pack import verify
+from verify_project_pack import SmokeCaseUnavailable, verify
 
 def environment(path):
     result={}
@@ -76,6 +76,9 @@ def diagnose(pack_id,*,root=ROOT,env_file=None,mock_case=None,probe_port=False):
         add('catalog-adapter','passed','Catalog and bootstrap load in a clean offline process')
         if mock_case:add('mock-smoke','passed','Selected offline SAFE case passed')
         else:add('mock-smoke','not_run','No explicit mock case supplied','Repeat with --mock-case <owned offline SAFE id>')
+    except SmokeCaseUnavailable as exc:
+        add('catalog-adapter','passed','Catalog and bootstrap load in a clean offline process')
+        add('mock-smoke','failed',str(exc),'Choose an available owned SAFE ID and rerun --mock-case')
     except (ValueError,RuntimeError) as exc:
         # A trusted bootstrap may include configured values in its own exception.
         detail=str(exc).replace(str(root),'[platform]')
@@ -84,7 +87,7 @@ def diagnose(pack_id,*,root=ROOT,env_file=None,mock_case=None,probe_port=False):
     statuses={item['status'] for item in checks}
     status='failed' if 'failed' in statuses else 'incomplete' if 'incomplete' in statuses else 'ready'
     return {'pack':pack_id,'ok':status=='ready','status':status,'checks':checks,'realBusinessVerified':False,
-            'nextCommand':'PLATFORM_ENV_FILE=.env.'+pack_id+' ./start.sh start'}
+            'nextCommand':'PLATFORM_ENV_FILE='+shlex.quote(str(env_path))+' ./start.sh start' if env_path.is_file() else None}
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--pack',required=True);p.add_argument('--env-file');p.add_argument('--mock-case');p.add_argument('--probe-port',action='store_true');p.add_argument('--report',type=Path);a=p.parse_args()

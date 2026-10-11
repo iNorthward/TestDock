@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+POLICY_ROOT = ROOT
 
 
 class RegressionGroups(dict):
@@ -158,6 +159,9 @@ def build_plan(groups, files, selected=(), root=ROOT):
 def execute_plan(plan, *, fixtures=None, inputs=None):
     if plan["unmappedSources"]:
         raise ValueError("新增/变更源码缺回归映射: "+", ".join(plan["unmappedSources"]))
+    available = {path.stem for path in (ROOT / "tests").glob("test_*.py")}
+    if ROOT == POLICY_ROOT and available and available.issubset(set(plan["python"])):
+        raise ValueError("选测叠加已覆盖全部 unittest；请缩小 --group/--file 或细化回归映射，禁止全量执行")
     from offline_process import execute
     return execute(ROOT, plan, fixtures=fixtures, inputs=inputs)
 

@@ -47,7 +47,7 @@ PLATFORM_ENV_FILE 选择环境文件，PLATFORM_PACKS 选择单个 Pack。每个
 | case_dirs / bootstrap | 声明所属案例目录与启动注册函数，先校验归属再装载 |
 | platform_api | min、max_exclusive 使用 major.minor；features 为唯一能力名称数组，不兼容时在 bootstrap 前拒绝 |
 | required_environment | 只保存必需配置键名，配置值留在所属项目私有环境文件 |
-| config_defaults / environment_aliases | 项目默认值及显式兼容；Core 不猜业务变量 |
+| config_defaults / config_aliases | 项目默认值及显式兼容；Core 不猜业务变量 |
 | resource_pool | enabled、标题、说明、分类、显示字段及维护策略；未启用时隐藏资源入口 |
 | panel_services / panel_extension | 当前 Pack 服务与可选 dispatch 路由，startup、execution_options 等 hook |
 | catalog_extension | 目录增强、分区、执行前 hook、case_context 和 reload 清理 |

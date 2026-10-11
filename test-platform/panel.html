@@ -35,8 +35,9 @@
 <div class="stat"><div class="stat-label">项目用例</div><div class="stat-value" id="total-cases">—</div><div class="stat-note">来自当前项目的用例目录</div></div>
 <div class="stat"><div class="stat-label">只读 / SAFE</div><div class="stat-value" id="safe-cases">—</div><div class="stat-note">可从工作台发起执行</div></div>
 <div class="stat"><div class="stat-label">测试套件</div><div class="stat-value" id="total-suites">—</div><div class="stat-note">按项目定义组织测试</div></div>
-</div><div class="home-section-row"><h2 class="home-section">工具</h2></div><div class="home-panel home-tool-table"><a class="home-tool-row" href="/insights?tab=inspect"><span class="ht-ico">🔄</span><div><div class="ht-title">Apifox 巡检</div><div class="ht-desc">契约差异 · 接口覆盖 · 巡检报告</div></div></a><a class="home-tool-row" href="/insights?tab=db-inspection"><span class="ht-ico">🗄</span><div><div class="ht-title">数据库巡检</div><div class="ht-desc">表结构变更 · 影响分析 · Schema 报告</div></div></a></div><div class="home-section-row"><h2 class="home-section">洞察</h2></div><div class="home-panel home-tool-table"><a class="home-tool-row" href="/insights"><span class="ht-ico">📊</span><div><div class="ht-title">测试洞察面板</div><div class="ht-desc">接口覆盖 · 回归历史 · Flaky 检测</div></div></a></div><div class="home-section-row"><h2 class="home-section">文档</h2></div><div class="home-panel home-tool-table"><a class="home-tool-row" href="/whitepaper"><span class="ht-ico">📖</span><div><div class="ht-title">平台白皮书</div><div class="ht-desc">运行模式 · 用例系列 · 环境与验收规范</div></div></a></div></div></div></section>
+</div><div class="home-section-row"><h2 class="home-section">工具</h2></div><div class="home-panel home-tool-table"><a class="home-tool-row" data-diagnostic="contract" style="display:none" href="/insights?tab=inspect"><span class="ht-ico">🔄</span><div><div class="ht-title">Apifox 巡检</div><div class="ht-desc">契约差异 · 接口覆盖 · 巡检报告</div></div></a><a class="home-tool-row" data-diagnostic="database" style="display:none" href="/insights?tab=db-inspection"><span class="ht-ico">🗄</span><div><div class="ht-title">数据库巡检</div><div class="ht-desc">表结构变更 · 影响分析 · Schema 报告</div></div></a></div><div class="home-section-row"><h2 class="home-section">洞察</h2></div><div class="home-panel home-tool-table"><a class="home-tool-row" href="/insights"><span class="ht-ico">📊</span><div><div class="ht-title">测试洞察面板</div><div class="ht-desc">接口覆盖 · 回归历史 · Flaky 检测</div></div></a></div><div class="home-section-row"><h2 class="home-section">文档</h2></div><div class="home-panel home-tool-table"><a class="home-tool-row" href="/whitepaper"><span class="ht-ico">📖</span><div><div class="ht-title">平台白皮书</div><div class="ht-desc">运行模式 · 用例系列 · 环境与验收规范</div></div></a></div></div></div></section>
 <div class="page-heading"><div><h1 id="page-title">用例工作台</h1><p class="subtitle" id="page-description">查看项目用例，让每一次执行都有迹可循。</p></div><button class="btn" id="reload" type="button">↻ 刷新目录</button></div>
+<p id="catalog-pending" class="muted" role="status" hidden>用例文件已更新，等待当前执行结束后重载。</p>
 <section id="case-view">
 <div class="bar"><button class="safe" id="batch-safe-bar">▶ 运行本组 SAFE</button><button class="live" id="batch-live">▶ 运行本组 LIVE</button><button class="safe" id="rerun-failed">↻ 重跑失败</button><span id="group-status" class="muted"></span></div><div class="case-filter"><div id="series-chips" class="chips"></div><button class="btn small" id="batch-safe" hidden>运行本组 SAFE</button><span id="filter-count" class="muted"></span></div>
 
@@ -52,6 +53,7 @@
 const $ = id => document.getElementById(id);
 let allCases = [], resourceDefinition = {enabled:false}, currentView = 'home', activeRun=null, packId='', watching=false;
 let suites=[],selectedSuite='',selectedSeries='all',onlyFailed=false,loadedSuite=null;const caseResults=new Map();
+let catalogRevision=null,revisionChecking=false;
 const setText = (id, value) => { $(id).textContent = value; };
 async function api(path, options) { const reply=await fetch(path, options); const payload=await reply.json(); if (!reply.ok || !payload.ok) throw new Error(payload.error || '请求失败'); return payload.data; }
 function showStatus(text, error=false){setText('group-status',text);setText('status-text',text);$('status').classList.toggle('error',error);}
@@ -108,12 +110,19 @@ function renderCases(){
 }
 async function loadCatalog(){
  try{const data=await api('/api/catalog?lite=1',{cache:'no-store'});allCases=data.cases||[];suites=data.suites||[];packId=data.packs?.[0]?.id||packId;try{for(const [id,result] of JSON.parse(sessionStorage.getItem('testdock.results.'+packId)||'[]'))caseResults.set(id,result);}catch(_){}renderNavigation();readRoute();
+ catalogRevision=data.catalogRevision;
  setText('pack-badge',(data.packs||[]).map(p=>p.name).join(' · ')||'未选择项目');
  setText('total-cases',allCases.length);setText('safe-cases',allCases.filter(c=>c.mode!=='live'&&!c.regressionExcluded).length);setText('total-suites',new Set(allCases.map(c=>c.suite)).size);renderCases();showStatus('目录已更新 · '+allCases.length+' 个用例');
  }catch(e){showStatus(e.message,true);}
 }
+async function pollCatalogRevision(){
+ if(revisionChecking)return;revisionChecking=true;
+ try{const data=await api('/api/catalog/revision',{cache:'no-store'});$('catalog-pending').hidden=!data.reloadPending;if(catalogRevision!==null&&data.revision!==catalogRevision)await loadCatalog();catalogRevision=data.revision;}
+ catch(error){console.debug('目录状态读取未完成',error.message);}
+ finally{revisionChecking=false;}
+}
 async function loadCapabilities(){
- try{const data=await api('/api/platform');packId=data.pack;restoreActiveJob();resourceDefinition=data.resourcePool||{enabled:false};$('nav-resources').hidden=!resourceDefinition.enabled;setText('resource-nav-label',resourceDefinition.title||'项目资源');setText('resource-title',resourceDefinition.title||'项目资源');setText('resource-description',resourceDefinition.description||'');if(!resourceDefinition.enabled&&currentView==='resources')location.hash='/home';}
+ try{const data=await api('/api/platform');packId=data.pack;document.querySelectorAll('[data-diagnostic]').forEach(node=>{node.hidden=!(data.diagnostics||[]).includes(node.dataset.diagnostic);node.style.display=node.hidden?'none':'';});restoreActiveJob();resourceDefinition=data.resourcePool||{enabled:false};$('nav-resources').hidden=!resourceDefinition.enabled;setText('resource-nav-label',resourceDefinition.title||'项目资源');setText('resource-title',resourceDefinition.title||'项目资源');setText('resource-description',resourceDefinition.description||'');if(!resourceDefinition.enabled&&currentView==='resources')location.hash='/home';}
  catch(e){showStatus('项目能力读取失败：'+e.message,true);}
 }
 async function loadResources(){
@@ -146,9 +155,9 @@ async function watchActiveJob(){
  finally{watching=false;renderCases();}
 }
 async function runCase(item,button){
- if(activeRun||watching)return;if(item.mode==='live'&&!confirm('此用例将写入当前项目测试环境。确认执行 '+item.id+'？'))return;button.disabled=true;watching=true;renderCases();setText('result-status','提交中');setText('result','正在提交 '+item.id+'…');
+ if(activeRun||watching)return;const requiresLive=TestDockSecurity.requiresLiveConfirmation(item);if(requiresLive&&!confirm('此用例将写入当前项目测试环境。确认执行 '+item.id+'？'))return;button.disabled=true;watching=true;renderCases();setText('result-status','提交中');setText('result','正在提交 '+item.id+'…');
  try{
-  const data=await api('/api/run-case',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,background:true})});
+  const data=await api('/api/run-case',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,background:true,...(requiresLive?{confirmLive:item.id}:{})})});
   activeRun={jobId:data.executionId,caseId:item.id};saveActiveJob();watching=false;await watchActiveJob();
  }catch(error){watching=false;setText('result-status','提交结果未确认');setText('result',error.message);showStatus(error.message,true);renderCases();}
 }
@@ -159,6 +168,6 @@ $('job-cancel').addEventListener('click',async()=>{
  try{const job=await api('/api/execution/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:activeRun.jobId})});setText('result-status',job.status);if(!watching)await watchActiveJob();}
  catch(error){showStatus(error.message,true);}finally{$('job-cancel').disabled=false;}
 });
-window.addEventListener('hashchange',readRoute);$('nav-cases').addEventListener('click',()=>{location.hash='/cases/';});$('nav-resources').addEventListener('click',()=>{location.hash='/resources';});$('filter').addEventListener('input',renderCases);$('reload').addEventListener('click',()=>{loadCatalog();loadCapabilities();if(currentView==='resources')loadResources();});$('identity-reload').addEventListener('click',loadResources);$('batch-safe').onclick=async()=>{if(activeRun||watching)return;if(!selectedSuite){showStatus('请先选择用例分组',true);return;}try{const data=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({suite:selectedSuite,mode:'safe',background:true})});activeRun={jobId:data.executionId,caseId:selectedSuite,batch:true};saveActiveJob();await watchActiveJob();}catch(error){showStatus(error.message,true);}};$('batch-safe-bar').onclick=()=>$('batch-safe').click();$('batch-live').onclick=async()=>{if(activeRun||watching||!selectedSuite)return;if(!confirm('本组 LIVE 会修改当前项目测试环境。确认执行？'))return;try{const data=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({suite:selectedSuite,mode:'live',background:true})});activeRun={jobId:data.executionId,caseId:selectedSuite,batch:true,mode:'live'};saveActiveJob();await watchActiveJob();}catch(error){showStatus(error.message,true);}};$('rerun-failed').onclick=async()=>{const failed=allCases.filter(c=>(!selectedSuite||c.suite===selectedSuite)&&caseResults.get(c.id)?.ok===false);for(const item of failed){await runCase(item,$('rerun-failed'));if(activeRun)break;}};loadCapabilities();loadCatalog();
+window.addEventListener('hashchange',readRoute);$('nav-cases').addEventListener('click',()=>{location.hash='/cases/';});$('nav-resources').addEventListener('click',()=>{location.hash='/resources';});$('filter').addEventListener('input',renderCases);$('reload').addEventListener('click',()=>{loadCatalog();loadCapabilities();if(currentView==='resources')loadResources();});$('identity-reload').addEventListener('click',loadResources);$('batch-safe').onclick=async()=>{if(activeRun||watching)return;if(!selectedSuite){showStatus('请先选择用例分组',true);return;}try{const data=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({suite:selectedSuite,mode:'safe',background:true})});activeRun={jobId:data.executionId,caseId:selectedSuite,batch:true};saveActiveJob();await watchActiveJob();}catch(error){showStatus(error.message,true);}};$('batch-safe-bar').onclick=()=>$('batch-safe').click();$('batch-live').onclick=async()=>{if(activeRun||watching||!selectedSuite)return;if(!confirm('本组 LIVE 会修改当前项目测试环境。确认执行？'))return;try{const data=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({suite:selectedSuite,mode:'live',background:true,confirmLive:selectedSuite})});activeRun={jobId:data.executionId,caseId:selectedSuite,batch:true,mode:'live'};saveActiveJob();await watchActiveJob();}catch(error){showStatus(error.message,true);}};$('rerun-failed').onclick=async()=>{const failed=allCases.filter(c=>(!selectedSuite||c.suite===selectedSuite)&&caseResults.get(c.id)?.ok===false);for(const item of failed){await runCase(item,$('rerun-failed'));if(activeRun)break;}};loadCapabilities();loadCatalog();setInterval(pollCatalogRevision,1500);pollCatalogRevision();
 </script>
 </body></html>
