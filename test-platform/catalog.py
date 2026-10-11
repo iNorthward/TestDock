@@ -370,13 +370,20 @@ def exec_case(case_id, execution_options=None):
 
         if isinstance(exc, (JobCancelled, JobTimedOut)):
             raise
-        if isinstance(exc, (IdentityUnavailable, ExecutionBusy)):
+        infra_incomplete = getattr(exc, "case_status", None) == "incomplete"
+        if isinstance(exc, (IdentityUnavailable, ExecutionBusy)) or infra_incomplete:
+            if isinstance(exc, ExecutionBusy):
+                label = "执行隔离"
+            elif isinstance(exc, IdentityUnavailable):
+                label = "账号池"
+            else:
+                label = str(getattr(exc, "case_label", "") or "基础设施")
             return normalize_case_result({
                 "id": case_id,
                 "ok": None,
                 "status": "incomplete",
                 "subs": [{
-                    "label": "执行隔离" if isinstance(exc, ExecutionBusy) else "账号池",
+                    "label": label,
                     "ok": None,
                     "status": "incomplete",
                     "detail": str(exc),

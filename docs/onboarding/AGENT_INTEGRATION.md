@@ -14,7 +14,7 @@
 
 ## 3. 首次体验与离线骨架
 
-Python 3.9+；Node 18+ 用于 JavaScript 回归。demo 不需 pip 安装数据库驱动。实际 DB 能力安装 requirements.txt；业务依赖放 packs/<id>/requirements.txt 并在隔离虚拟环境安装。
+Python 3.9+；Node 20+ 用于 JavaScript 回归。demo 不需 pip 安装数据库驱动。实际 DB 能力安装 requirements.txt（PyMySQL + SQLAlchemy，见[数据库连接池指南](../guides/数据库连接池.md)）；业务依赖放 packs/<id>/requirements.txt 并在隔离虚拟环境安装。
 
 ```sh
 ./start.sh start

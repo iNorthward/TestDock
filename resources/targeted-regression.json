@@ -290,10 +290,17 @@
         "test-platform/common/db_conn.py",
         "requirements.txt",
         "tests/test_db_pool.py",
-        "tests/test_db_config.py"
+        "tests/test_db_pool_fixes.py",
+        "tests/test_db_pool_mysql.py",
+        "tests/test_db_config.py",
+        "timezone_config.py",
+        "scripts/check_env.py",
+        "docs/guides/数据库连接池.md"
       ],
       "python": [
         "test_db_pool",
+        "test_db_pool_fixes",
+        "test_db_pool_mysql",
         "test_db_config"
       ],
       "javascript": []

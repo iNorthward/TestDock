@@ -53,6 +53,19 @@ def configure_timezone(env_file: Path | str | None = None) -> ZoneInfo:
     return PROJECT_TZ
 
 
+def mysql_session_time_zone() -> str:
+    """Return the MySQL session offset (e.g. '+08:00') derived from PROJECT_TZ.
+
+    Asia/Shanghai has no DST, so a fixed offset is exact; DB sessions must use
+    this single source instead of hard-coding the literal.
+    """
+    offset = datetime.now(PROJECT_TZ).utcoffset()
+    minutes = int(offset.total_seconds()) // 60
+    sign = "+" if minutes >= 0 else "-"
+    hours, minutes = divmod(abs(minutes), 60)
+    return f"{sign}{hours:02d}:{minutes:02d}"
+
+
 def now_project() -> datetime:
     """Return an aware timestamp in the configured project timezone."""
     configure_timezone()

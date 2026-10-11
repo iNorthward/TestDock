@@ -19,8 +19,10 @@ import threading
 
 try:
     from sqlalchemy import create_pool_from_url, event
+    from sqlalchemy.exc import TimeoutError as _PoolTimeout
 except ImportError:
     create_pool_from_url = event = None
+    _PoolTimeout = None
 
 try:
     import pymysql
@@ -28,8 +30,32 @@ except ImportError:
     pymysql = None
 
 from platform_config import load_project_env, project_setting
+from timezone_config import mysql_session_time_zone
 
 load_project_env()
+
+# PyMySQL 1.2.0 未公开 COM_RESET_CONNECTION；协议常量为 0x1F（MySQL >= 5.7.3 / MariaDB >= 10.2.4）。
+_COM_RESET_CONNECTION = 0x1F
+
+
+def _session_time_zone_sql():
+    """init_command 与借出恢复共用的唯一时区语句来源。"""
+    return "SET time_zone = '%s'" % mysql_session_time_zone()
+
+
+class DatabasePoolExhausted(RuntimeError, *((_PoolTimeout,) if _PoolTimeout else ())):
+    """池满等待超时：属于基础设施未就绪，案例应记为 incomplete 而非 failed。
+
+    同时继承 SQLAlchemy TimeoutError，兼容已有 except TimeoutError 的调用方。
+    """
+    case_status = "incomplete"
+    case_label = "数据库连接池"
+
+
+class DatabaseDependencyUnavailable(RuntimeError):
+    """Missing optional database runtime; never a business assertion failure."""
+    case_status = "incomplete"
+    case_label = "数据库依赖"
 
 
 def _first_nonempty_setting(key, *, aliases=(), default=None):
@@ -78,7 +104,7 @@ def db(database=None, *, connect_timeout=None, read_timeout=None, write_timeout=
     if missing:
         raise RuntimeError("缺少数据库配置：" + "、".join(missing))
     if pymysql is None:
-        raise RuntimeError("[incomplete] 数据库连接功能需要安装 pymysql")
+        raise DatabaseDependencyUnavailable("[incomplete] 数据库连接功能需要安装 pymysql")
     kwargs = dict(
         host=settings["host"],
         port=settings["port"],
@@ -88,7 +114,7 @@ def db(database=None, *, connect_timeout=None, read_timeout=None, write_timeout=
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=True,
-        init_command="SET time_zone = '+08:00'",
+        init_command=_session_time_zone_sql(),
         connect_timeout=max(1, int(connect_timeout or settings["connect_timeout"])),
         read_timeout=max(1, int(read_timeout or settings["read_timeout"])),
         write_timeout=max(1, int(write_timeout or settings["write_timeout"])),
@@ -101,7 +127,7 @@ def db(database=None, *, connect_timeout=None, read_timeout=None, write_timeout=
         close_pools()
         return pymysql.connect(**kwargs)
     if create_pool_from_url is None:
-        raise RuntimeError("[incomplete] 数据库连接池需要安装 SQLAlchemy；或设置 PLATFORM_DB_POOL_ENABLED=0 使用短连接")
+        raise DatabaseDependencyUnavailable("[incomplete] 数据库连接池需要安装 SQLAlchemy；或设置 PLATFORM_DB_POOL_ENABLED=0 使用短连接")
     options = _pool_options()
     profile = (database, kwargs["connect_timeout"], kwargs["read_timeout"], kwargs["write_timeout"])
     fingerprint = hashlib.sha256(json.dumps([_kwargs_signature(kwargs), options], sort_keys=True).encode()).digest()
@@ -114,7 +140,15 @@ def db(database=None, *, connect_timeout=None, read_timeout=None, write_timeout=
             if state is not None:
                 state.retire()
             state = _POOLS[profile] = replacement
-    return _Connection(state, state.pool.connect())
+    try:
+        handle = state.pool.connect()
+    except _PoolTimeout as exc:
+        raise DatabasePoolExhausted(
+            "[incomplete] 数据库连接池已满：等待 %s 秒仍无空闲连接（PLATFORM_DB_POOL_SIZE=%s，"
+            "PLATFORM_DB_POOL_MAX_OVERFLOW=%s）；本次未取得连接，此前操作需另行核验"
+            % (options["timeout"], options["pool_size"], options["max_overflow"])
+        ) from exc
+    return _Connection(state, handle)
 
 
 def _kwargs_signature(kwargs):
@@ -148,20 +182,39 @@ class _PoolState:
             "mysql+pymysql://", creator=lambda: pymysql.connect(**kwargs),
             pre_ping=True, reset_on_return="rollback", use_lifo=True, **options,
         )
-        # Restore the session defaults used by all existing callers. Arbitrary
-        # user variables and temporary tables require an explicit invalidation.
+        # 归还时由服务端整体清理会话（用户变量、临时表、GET_LOCK、会话变量、
+        # 未提交事务、预处理语句）。任何失败都抛出，SQLAlchemy 会记录错误并
+        # invalidate 该物理连接（fail-closed），绝不把脏会话交给下一个借用者。
+        @event.listens_for(self.pool, "reset")
+        def reset_session(connection, record, reset_state):
+            if reset_state.terminate_only:
+                return
+            _reset_server_session(connection)
+
+        # COM_RESET_CONNECTION 会把 autocommit/字符集/时区恢复为服务端默认，
+        # 借出时统一恢复平台约定的会话默认值。
         @event.listens_for(self.pool, "checkout")
         def restore_session(connection, record, proxy):
             connection.autocommit(True)
             connection.select_db(kwargs["database"])
             connection.set_character_set("utf8mb4")
             with connection.cursor() as cursor:
-                cursor.execute("SET time_zone = '+08:00'")
+                cursor.execute(_session_time_zone_sql())
 
     def retire(self):
         with self.lock:
             self.retired = True
             self.pool.dispose()
+
+
+def _reset_server_session(connection):
+    """发送 COM_RESET_CONNECTION；驱动不支持或服务端拒绝时抛出，由连接池淘汰该连接。"""
+    execute = getattr(connection, "_execute_command", None)
+    read_ok = getattr(connection, "_read_ok_packet", None)
+    if not callable(execute) or not callable(read_ok):
+        raise RuntimeError("当前 PyMySQL 不支持 COM_RESET_CONNECTION；淘汰该连接以免会话状态泄漏")
+    execute(_COM_RESET_CONNECTION, "")
+    read_ok()
 
 
 class _Connection:

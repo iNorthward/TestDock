@@ -8,13 +8,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from sqlalchemy.exc import TimeoutError
-import pymysql
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "test-platform/common")]
 import db_conn
 import platform_config
+
+# SQLAlchemy / PyMySQL 是 requirements.txt 声明的数据库依赖；未安装时整组跳过而不是 ImportError。
+pymysql = db_conn.pymysql
+POOL_DEPS = db_conn.pymysql is not None and db_conn.create_pool_from_url is not None
 
 
 class Cursor:
@@ -27,6 +28,12 @@ class Cursor:
         self.connection.statements.append(sql)
         if self.connection.execute_error:
             raise self.connection.execute_error
+        # 模拟服务端会话状态：用户变量与临时表只在 COM_RESET_CONNECTION 时清空。
+        if sql.startswith("SET @"):
+            name, _, value = sql[len("SET @"):].partition("=")
+            self.connection.session[name.strip()] = value.strip()
+        elif sql.startswith("CREATE TEMPORARY TABLE "):
+            self.connection.temp_tables.add(sql.split()[3])
     def fetchone(self): return {"value": 1}
 
 
@@ -40,7 +47,17 @@ class Connection:
         self.execute_error = None
         self.auto = kwargs["autocommit"]
         self.database = kwargs["database"]
+        self.session = {}
+        self.temp_tables = set()
+        self.commands = []
+        self.reset_error = None
     def cursor(self): return Cursor(self)
+    def _execute_command(self, command, sql):
+        self.commands.append(command)
+        if self.dead: raise pymysql.OperationalError(2006, "synthetic disconnect")
+        if self.reset_error: raise self.reset_error
+    def _read_ok_packet(self):
+        self.session.clear(); self.temp_tables.clear(); self.auto = True
     def rollback(self):
         self.rollbacks += 1
         if self.dead: raise pymysql.OperationalError(2006, "synthetic disconnect")
@@ -55,6 +72,13 @@ class Connection:
     def character_set_name(self): return "utf8mb4"
 
 
+class LegacyDriverConnection(Connection):
+    """模拟不提供 COM_RESET_CONNECTION 内部接口的驱动版本。"""
+    _execute_command = None
+    _read_ok_packet = None
+
+
+@unittest.skipUnless(POOL_DEPS, "未安装 requirements.txt 中的 PyMySQL/SQLAlchemy，跳过连接池测试")
 class DatabasePoolTests(unittest.TestCase):
     def setUp(self):
         db_conn.close_pools()
@@ -83,7 +107,11 @@ class DatabasePoolTests(unittest.TestCase):
     def test_full_pool_has_bounded_wait_and_recovers(self):
         a = db_conn.db()
         started = time.monotonic()
-        with self.assertRaises(TimeoutError): db_conn.db()
+        with self.assertRaisesRegex(db_conn.DatabasePoolExhausted, r"\[incomplete\].*连接池已满") as caught:
+            db_conn.db()
+        self.assertEqual(caught.exception.case_status, "incomplete")
+        from sqlalchemy.exc import TimeoutError as PoolTimeout
+        self.assertIsInstance(caught.exception, PoolTimeout)
         elapsed = time.monotonic() - started
         self.assertGreaterEqual(elapsed, 0.9)
         self.assertLess(elapsed, 3)
@@ -169,6 +197,82 @@ class DatabasePoolTests(unittest.TestCase):
         with self.assertLogs("sqlalchemy.pool", level="ERROR"): a.close()
         db_conn.db().close()
         self.assertEqual(len(self.connections), 2)
+    def test_session_state_does_not_leak_to_next_case(self):
+        with db_conn.db() as case_a:
+            with case_a.cursor() as cursor:
+                cursor.execute("SET @case_marker = 'case-A'")
+                cursor.execute("CREATE TEMPORARY TABLE case_tmp (id INT)")
+        raw = self.connections[0]
+        with db_conn.db():
+            self.assertEqual(len(self.connections), 1, "必须复用同一物理连接才能证明清理有效")
+            self.assertEqual(raw.session, {})
+            self.assertEqual(raw.temp_tables, set())
+            self.assertEqual(raw.commands, [db_conn._COM_RESET_CONNECTION])
+            self.assertEqual(raw.statements[-1], db_conn._session_time_zone_sql())
+
+    def test_leak_reproduces_without_server_reset(self):
+        # 对照组：去掉 COM_RESET_CONNECTION 后，仅靠 rollback 会把 case-A 的会话状态带给 case-B。
+        with patch.object(db_conn, "_reset_server_session", lambda connection: None):
+            with db_conn.db() as case_a:
+                case_a.cursor().execute("SET @case_marker = 'case-A'")
+            with db_conn.db():
+                self.assertEqual(self.connections[0].session, {"case_marker": "'case-A'"})
+
+    def test_reset_rejected_by_server_discards_connection(self):
+        a = db_conn.db(); raw = self.connections[0]
+        a.cursor().execute("SET @case_marker = 'case-A'")
+        raw.reset_error = pymysql.OperationalError(1047, "synthetic unknown command")
+        with self.assertLogs("sqlalchemy.pool", level="ERROR"): a.close()
+        self.assertTrue(raw.closed)
+        with db_conn.db():
+            self.assertEqual(len(self.connections), 2)
+            self.assertEqual(self.connections[1].session, {})
+
+    def test_reset_response_read_failure_discards_connection(self):
+        a = db_conn.db(); raw = self.connections[0]
+        raw._read_ok_packet = lambda: (_ for _ in ()).throw(pymysql.OperationalError(2013, 'synthetic reset read timeout'))
+        with self.assertLogs('sqlalchemy.pool', level='ERROR'): a.close()
+        self.assertTrue(raw.closed)
+        with db_conn.db(): self.assertEqual(len(self.connections), 2)
+
+    def test_reset_uses_real_pymysql_packet_and_updates_server_status(self):
+        from pymysql.protocol import MysqlPacket
+        connection = pymysql.connections.Connection(defer_connect=True)
+        writes = []
+        connection._sock = object()
+        connection._write_bytes = writes.append
+        connection._read_packet = lambda: MysqlPacket(b'\x00\x00\x00\x02\x00\x00\x00', 'utf8')
+        connection.server_status = 0
+        try:
+            db_conn._reset_server_session(connection)
+            self.assertEqual(writes, [b'\x01\x00\x00\x00\x1f'])
+            self.assertEqual(connection.server_status, 2)
+        finally:
+            connection._sock = None
+
+    def test_driver_without_reset_support_fails_closed(self):
+        patch.object(db_conn.pymysql, "connect", side_effect=lambda **kw: self._legacy(**kw)).start()
+        a = db_conn.db()
+        a.cursor().execute("SET @case_marker = 'case-A'")
+        with self.assertLogs("sqlalchemy.pool", level="ERROR") as logs: a.close()
+        self.assertIn("COM_RESET_CONNECTION", "\n".join(logs.output))
+        with self.assertLogs("sqlalchemy.pool", level="ERROR"):
+            with db_conn.db():
+                self.assertEqual(len(self.connections), 2)
+                self.assertTrue(self.connections[0].closed)
+                self.assertEqual(self.connections[1].session, {})
+
+    def _legacy(self, **kwargs):
+        connection = LegacyDriverConnection(**kwargs)
+        with self.lock: self.connections.append(connection)
+        return connection
+
+    def test_terminate_only_reset_skips_server_round_trip(self):
+        a = db_conn.db(); raw = self.connections[0]
+        a.invalidate()
+        self.assertEqual(raw.commands, [])
+        self.assertTrue(raw.closed)
+
     def test_session_defaults_restored(self):
         a = db_conn.db(); raw = self.connections[0]
         a.autocommit(False); a.select_db("synthetic_other"); a.set_charset("latin1"); a.close()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import argparse
+import importlib.util
 import json
 import os
 import sys
@@ -26,6 +27,8 @@ _DB_REQUIREMENTS = (
     ("PLATFORM_DB_USER", ()),
     ("PLATFORM_DB_PASSWORD", ()),
 )
+# 数据库能力的 Python 依赖（requirements.txt 中固定版本）。只检查模块可发现性，不导入、不连库。
+_DB_PACKAGES = (("pymysql", "PyMySQL"), ("sqlalchemy", "SQLAlchemy"))
 _APIFOX_REQUIREMENTS = (("APIFOX_ACCESS_TOKEN", ()),)
 _WEBHOOK_NAMES = ("PLATFORM_WEBHOOK_WECHAT", "PLATFORM_WEBHOOK_DINGTALK")
 
@@ -36,6 +39,20 @@ def _has_value(env: Mapping[str, object], name: str, aliases=()) -> bool:
 
 def _missing(env: Mapping[str, object], requirements) -> list[str]:
     return [name for name, aliases in requirements if not _has_value(env, name, aliases)]
+
+
+def _package_available(module: str) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _missing_db_packages(env: Mapping[str, object]) -> list[str]:
+    """PyMySQL 总是必需；连接池启用（默认）时 SQLAlchemy 也必需。只返回包名。"""
+    pool_disabled = str(env.get("PLATFORM_DB_POOL_ENABLED", "")).strip() == "0"
+    return [f"python:{name}" for module, name in _DB_PACKAGES
+            if not (module == "sqlalchemy" and pool_disabled) and not _package_available(module)]
 
 
 def _literal_suite_ids(path: Path) -> list[str]:
@@ -135,7 +152,7 @@ def build_preflight_report(env: Mapping[str, object] | None = None, *, root: Pat
     """Return connection key names and pool role names; never return their values."""
     current_env = os.environ if env is None else env
     root = Path(root).resolve()
-    db_missing = _missing(current_env, _DB_REQUIREMENTS)
+    db_missing = _missing(current_env, _DB_REQUIREMENTS) + _missing_db_packages(current_env)
     apifox_missing = _missing(current_env, _APIFOX_REQUIREMENTS)
     optional_sections = [
         _optional_section(current_env, check["name"], check["variables"],
@@ -164,7 +181,8 @@ def build_preflight_report(env: Mapping[str, object] | None = None, *, root: Pat
             "missing": db_missing,
             "ready": not db_missing,
             "blocking": False,
-            "note": "缺少连接项只影响数据库对账。",
+            "note": "缺少连接项或 python:PyMySQL / python:SQLAlchemy 只影响数据库对账；"
+                    "依赖请执行 pip install -r requirements.txt（关闭连接池时不要求 SQLAlchemy）。",
         },
         {
             "id": "apifox",

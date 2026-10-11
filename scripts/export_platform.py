@@ -63,7 +63,7 @@ def build(destination, *, source=ROOT, pack_ids=()):
                    'scripts/offline_guard.cjs', 'resources/platform-core-files.json',
                    'requirements.txt', '.nvmrc', '.env.example', 'AGENTS.md', 'README.md', 'scripts/check.sh',
                    'tests/test_platform_distribution_runtime.py']
-        for relative in dict.fromkeys([*inventory, *support, *_tree_files(source, 'assets'), *_tree_files(source, 'docs/architecture'), *_tree_files(source, 'docs/onboarding'), *_tree_files(source, 'docs/reports/mature-foundation'), *_tree_files(source, 'docs/reports/six-improvements')]):
+        for relative in dict.fromkeys([*inventory, *support, *_tree_files(source, 'assets'), *_tree_files(source, 'docs/architecture'), *_tree_files(source, 'docs/onboarding'), *_tree_files(source, 'docs/guides'), *_tree_files(source, 'docs/reports/mature-foundation'), *_tree_files(source, 'docs/reports/six-improvements')]):
             _copy(source, platform, relative)
         # Platform examples are standalone projects, never default business policy.
         for relative in [*_tree_files(source, str(Path('packs') / 'demo_pack')), *_tree_files(source, str(Path('examples') / 'demo_pack')), *_tree_files(source, str(Path('examples') / 'http_pack_template')), *_tree_files(source, 'examples/adapter_recipes')]:

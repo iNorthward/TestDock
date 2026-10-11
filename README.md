@@ -37,7 +37,7 @@ PLATFORM_ENV_FILE=/dev/null python3 scripts/check_platform_isolation.py --demo-s
 PLATFORM_ENV_FILE=/dev/null python3 scripts/targeted_regression.py --group onboarding --group isolation
 ```
 
-所有接入资产先明确归属；不执行全量业务案例。需要数据库能力时在隔离虚拟环境安装 requirements.txt，并安装业务 Pack 自己的依赖。发行不携带仓库元数据；接入项目按自己的版本管理策略维护。
+所有接入资产先明确归属；不执行全量业务案例。需要数据库能力时在隔离虚拟环境安装 requirements.txt（PyMySQL 与 SQLAlchemy 连接池均为必需依赖；`python3 scripts/check_env.py` 会按包名提示缺项），并安装业务 Pack 自己的依赖。用法、会话清理与池满语义见[数据库连接池指南](docs/guides/数据库连接池.md)。发行不携带仓库元数据；接入项目按自己的版本管理策略维护。
 
 ## 显式 HTTP 接入与端到端自检
 
@@ -55,7 +55,7 @@ Pack 目前只能从平台仓库内的 `packs/<id>` 装载，尚不支持外部�
 
 ## 架构说明
 
-[平台架构白皮书](docs/architecture/TEST_PLATFORM_ARCHITECTURE.md) 说明当前 Core / Pack / Adapter 边界、接入与执行协议、发行和验证范围。
+[平台架构白皮书](docs/architecture/TEST_PLATFORM_ARCHITECTURE.md) 说明当前 Core / Pack / Adapter 边界、接入与执行协议、发行和验证范围。数据库访问统一经 `db()` 连接池，见[数据库连接池指南](docs/guides/数据库连接池.md)。
 
 ## 接入体检、升级和执行控制
 

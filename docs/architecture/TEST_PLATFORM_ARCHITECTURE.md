@@ -100,6 +100,8 @@ ApiSession 使用当前项目的 TokenProvider、RequestAuthProvider、HttpTrans
 | 任务活动态 | queued / running / cancel_requested | 未到终态，不能宣布通过或已经取消 |
 | 任务终态 | done / failed / incomplete / skipped / interrupted / cancelled / timed_out | 调度、执行或停止结论，须同时读取 result 中的案例状态 |
 
+数据库连接池等待超时属于基础设施未就绪，案例记为 incomplete 而不是 failed；连接池是 Core 通用基础设施，归还时用 COM_RESET_CONNECTION 清空会话，详见[数据库连接池指南](../guides/数据库连接池.md)。
+
 cancelled 和 timed_out 是任务生命周期终态。停止后的未完整案例保持 incomplete，而不是把 cancelled 当第五种案例状态。缺配置、未执行或不完整子断言不能算 passed；进程中断不自动重放可能已触发的业务操作。
 
 ## 9. 历史、差异与平台 API
