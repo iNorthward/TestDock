@@ -20,3 +20,15 @@ class HistoryCompareTests(unittest.TestCase):
     def test_duplicate_assertion_labels_are_preserved(self):
         a=self.run_data();b=self.run_data();a['cases'][0]['subs']*=2;b['cases'][0]['subs']=[{'label':'type','ok':True,'detail':'shape'},{'label':'type','ok':False,'detail':'changed'}]
         changes=compare_runs(a,b)['changes'][0]['assertionChanges'];self.assertEqual(changes[0]['occurrence'],2)
+
+    def test_missing_contract_files_do_not_count_as_available_evidence(self):
+        a=self.run_data(fingerprint=None);b=self.run_data(fingerprint=None)
+        self.assertFalse(compare_runs(a,b)['contractEvidenceAvailable'])
+        a['executionMetadata']['contractFingerprints']={'http':'digest','missing':None}
+        b['executionMetadata']['contractFingerprints']={'http':'digest'}
+        self.assertFalse(compare_runs(a,b)['contractEvidenceAvailable'])
+
+    def test_malformed_history_containers_raise_validation_errors(self):
+        for field,value in (('executionMetadata',None),('executionMetadata',[]),('cases',None)):
+            a=self.run_data();a[field]=value
+            with self.subTest(field=field,value=value),self.assertRaises(ValueError):compare_runs(a,self.run_data())

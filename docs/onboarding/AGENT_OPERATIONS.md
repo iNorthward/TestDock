@@ -25,7 +25,7 @@ python3 scripts/project_tasks.py --pack my_app record --task adapter --evidence 
 
 状态保存在 `data/<pack>/onboarding-tasks.json`，不保存凭据或报告正文。scope、environment、adapter、mock、regression、real_readonly 分开验证。mock 与 adapter 证据来自体检，regression 必须是本 Pack 的定向测试组并通过。scope 的人工授权证据格式为 `{"pack":"my_app","authorizedReadOnly":true,"caseIds":["REAL-R01"]}`。真实报告必须标明同一 Pack、scope=real_readonly、realBusinessVerified=true、ok=true 和实际 caseIds；不允许超出 scope 的案例。
 
-记录保存报告 SHA-256；证据改变或删除后，status 会显示 stale，须重新验收。真实报告是可信接入者提供的证据，不是远端服务的加密证明；应保留执行环境、断言和限制。启用 --require-real 后，mock 成功不能关闭真实验收任务。执行时保留必要的证据文件，临时 Pack 完成后一起清理。
+记录保存报告 SHA-256；证据改变或删除后，status 会显示 stale，须重新验收。真实验收同时绑定本次授权范围证据的摘要；范围被替换、失效或不再覆盖已执行案例时，真实验收也标记 stale，不能保留旧成功。报告内容与摘要来自同一次文件读取；损坏或缺项的任务清单拒绝装载。真实报告是可信接入者提供的证据，不是远端服务的加密证明；应保留执行环境、断言和限制。启用 --require-real 后，mock 成功不能关闭真实验收任务。执行时保留必要的证据文件，临时 Pack 完成后一起清理。
 
 ## Adapter 配方
 

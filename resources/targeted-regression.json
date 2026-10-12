@@ -138,7 +138,9 @@
         "assets/theme-switcher.js",
         "test-platform/insights.html",
         "assets/themes/*.css",
-        "assets/security-client.js"
+        "assets/security-client.js",
+        "assets/workspace-shell.js",
+        "assets/reference-workspace.css"
       ],
       "python": [
         "test_panel_pack_labels"

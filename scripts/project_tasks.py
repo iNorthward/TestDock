@@ -27,7 +27,17 @@ def load(pack_id,*,root=ROOT,require_real=False):
     path=state_path(pack_id,root)
     if path.exists():
         data=json.loads(path.read_text())
-        if data.get('pack')!=pack_id or data.get('schemaVersion')!=1:raise ValueError('foreign task state')
+        if not isinstance(data,dict) or data.get('pack')!=pack_id or data.get('schemaVersion')!=1:raise ValueError('foreign task state')
+        rows=data.get('tasks')
+        if (type(data.get('requireReal')) is not bool or not isinstance(rows,list)
+                or len(rows)!=len(TASKS)
+                or any(not isinstance(row,dict) or not isinstance(row.get('id'),str) for row in rows)
+                or {row['id'] for row in rows}!=set(TASKS)):
+            raise ValueError('task state must contain every declared task exactly once')
+        for row in rows:
+            required=row['id']!='real_readonly' or data['requireReal']
+            if row.get('required') is not required or row.get('status') not in ('pending','passed','stale'):
+                raise ValueError('task state has invalid requirements or status')
         return data
     return {'schemaVersion':1,'pack':pack_id,'requireReal':require_real,'tasks':[
         {'id':key,'required':key!='real_readonly' or require_real,'status':'pending','nextAction':value}
@@ -52,43 +62,69 @@ def validate_evidence(pack_id,task,report):
     if not isinstance(report,dict):raise ValueError('evidence must be a JSON object')
     if task!='regression' and report.get('pack')!=pack_id:raise ValueError('evidence belongs to another Pack')
     if task=='scope':
-        return report.get('authorizedReadOnly') is True and isinstance(report.get('caseIds'),list) and bool(report['caseIds']) and all(isinstance(v,str) and v for v in report['caseIds'])
+        return report.get('authorizedReadOnly') is True and _valid_case_ids(report.get('caseIds'))
     if task in {'environment','adapter','mock'}:
-        checks={c.get('name'):c.get('status') for c in report.get('checks',[]) if isinstance(c,dict)}
+        raw_checks=report.get('checks')
+        if not isinstance(raw_checks,list):return False
+        checks={c.get('name'):c.get('status') for c in raw_checks if isinstance(c,dict) and isinstance(c.get('name'),str)}
         if task=='environment':return report.get('status')=='ready' and checks.get('environment')=='passed'
         return checks.get('catalog-adapter')=='passed' and (task!='mock' or checks.get('mock-smoke')=='passed')
     if task=='regression':
         return (report.get('ok') is True and type(report.get('testsRun')) is int and report['testsRun']>0
-                and bool(report.get('groups')) and all(isinstance(g,str) and g.startswith(pack_id+'.') for g in report['groups'])
-                and report.get('offlineIsolation',{}).get('temporaryDataRemoved') is True)
+                and isinstance(report.get('groups'),list) and bool(report['groups'])
+                and all(isinstance(g,str) and g.startswith(pack_id+'.') for g in report['groups'])
+                and isinstance(report.get('offlineIsolation'),dict)
+                and report['offlineIsolation'].get('temporaryDataRemoved') is True)
     if task=='real_readonly':
         return (report.get('ok') is True and report.get('scope')=='real_readonly'
-                and report.get('realBusinessVerified') is True and isinstance(report.get('caseIds'),list) and bool(report['caseIds']))
+                and report.get('realBusinessVerified') is True and _valid_case_ids(report.get('caseIds')))
     raise ValueError('unknown task')
+
+def _valid_case_ids(values):
+    return (isinstance(values,list) and bool(values)
+            and all(isinstance(v,str) and bool(v) and v==v.strip() for v in values)
+            and len(values)==len(set(values)))
+
+def _read_evidence(path):
+    raw=Path(path).read_bytes()
+    return json.loads(raw),hashlib.sha256(raw).hexdigest()
 
 def record(pack_id,task,evidence,*,root=ROOT):
     if task not in TASKS:raise ValueError('unknown task')
-    data=load(pack_id,root=root);path=Path(evidence).resolve()
-    report=json.loads(path.read_text())
+    data=status(pack_id,root=root);path=Path(evidence).resolve()
+    report,digest=_read_evidence(path)
     if not validate_evidence(pack_id,task,report):raise ValueError('evidence does not prove this task passed')
     if task=='real_readonly':
         scope=next(t for t in data['tasks'] if t['id']=='scope')
         if scope['status']!='passed':raise ValueError('authorized scope evidence required first')
-        declared=json.loads(Path(scope['evidencePath']).read_text())
-        if hashlib.sha256(Path(scope['evidencePath']).read_bytes()).hexdigest()!=scope['evidenceSha256']:
+        declared,scope_digest=_read_evidence(scope['evidencePath'])
+        if scope_digest!=scope['evidenceSha256'] or not validate_evidence(pack_id,'scope',declared):
             raise ValueError('scope evidence changed')
         if not set(report['caseIds'])<=set(declared['caseIds']):raise ValueError('real case IDs exceed declared scope')
     for row in data['tasks']:
-        if row['id']==task:row.update(status='passed',evidencePath=str(path),evidenceSha256=hashlib.sha256(path.read_bytes()).hexdigest(),recordedAt=int(time.time()))
+        if row['id']==task:
+            row.update(status='passed',evidencePath=str(path),evidenceSha256=digest,recordedAt=int(time.time()))
+            if task=='real_readonly':row['scopeEvidenceSha256']=scope_digest
     save(data,root);return status(pack_id,root=root)
 
 def status(pack_id,*,root=ROOT):
     data=load(pack_id,root=root)
+    reports={}
     for row in data['tasks']:
         if row['status']=='passed':
-            path=Path(row['evidencePath'])
-            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=row['evidenceSha256']:
+            try:
+                report,digest=_read_evidence(row['evidencePath'])
+                valid=digest==row['evidenceSha256'] and validate_evidence(pack_id,row['id'],report)
+            except (OSError,ValueError,KeyError):valid=False
+            if valid:reports[row['id']]=report
+            else:
                 row['status']='stale';row['nextAction']='Regenerate and re-record changed or missing evidence'
+    scope=next(row for row in data['tasks'] if row['id']=='scope')
+    real=next(row for row in data['tasks'] if row['id']=='real_readonly')
+    if real['status']=='passed' and (scope['status']!='passed'
+            or real.get('scopeEvidenceSha256',scope.get('evidenceSha256'))!=scope.get('evidenceSha256')
+            or not set(reports['real_readonly']['caseIds'])<=set(reports['scope']['caseIds'])):
+        real.update(status='stale',nextAction='Re-record real acceptance against the current authorized scope')
     ready=all(row['status']=='passed' for row in data['tasks'] if row['required'])
     data.update(ok=ready,status='ready' if ready else 'incomplete',realBusinessVerified=any(row['id']=='real_readonly' and row['status']=='passed' for row in data['tasks']))
     return data

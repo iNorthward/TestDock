@@ -1,0 +1,101 @@
+{
+  "groups": [
+    "execution",
+    "execution-ui",
+    "gate",
+    "onboarding",
+    "review-fixes"
+  ],
+  "python": [
+    "test_adapter_recipes",
+    "test_agent_onboarding",
+    "test_audit_fixes",
+    "test_background_execution",
+    "test_catalog_import_bootstrap",
+    "test_catalog_run",
+    "test_execution_entrypoints",
+    "test_execution_guard",
+    "test_execution_jobs",
+    "test_execution_provenance",
+    "test_execution_queue",
+    "test_history_compare",
+    "test_insights_actions",
+    "test_isolated_runner",
+    "test_offline_regression_isolation",
+    "test_panel_pack_labels",
+    "test_project_handoff",
+    "test_recheck_fixes",
+    "test_run_history",
+    "test_run_history_query_bounds",
+    "test_server_duration_clock",
+    "test_sync_agent_rules",
+    "test_targeted_regression"
+  ],
+  "javascript": [
+    "tests/test_execution_client.js",
+    "tests/test_security_client.js",
+    "tests/test_theme_contract.js"
+  ],
+  "unmappedSources": [],
+  "sourceMapping": {
+    "README.md": [],
+    "assets/reference-workspace.css": [
+      "execution-ui"
+    ],
+    "assets/security-client.js": [
+      "execution-ui"
+    ],
+    "assets/workspace-shell.js": [
+      "execution-ui"
+    ],
+    "docs/onboarding/AGENT_OPERATIONS.md": [
+      "review-fixes"
+    ],
+    "docs/reports/db-pool/2026-10-11/接入报告.md": [],
+    "resources/targeted-regression.json": [
+      "gate"
+    ],
+    "scripts/project_tasks.py": [
+      "onboarding"
+    ],
+    "test-platform/execution_jobs.py": [
+      "execution"
+    ],
+    "test-platform/history_compare.py": [
+      "execution"
+    ],
+    "test-platform/http_security.py": [
+      "execution"
+    ],
+    "test-platform/insights.html": [
+      "execution-ui"
+    ],
+    "test-platform/server.py": [
+      "execution"
+    ],
+    "tests/test_audit_fixes.py": [],
+    "tests/test_execution_jobs.py": [],
+    "tests/test_history_compare.py": [],
+    "tests/test_project_handoff.py": [],
+    "tests/test_security_client.js": [],
+    "tests/test_theme_contract.js": []
+  },
+  "businessCasesExecuted": 0,
+  "testsRun": 148,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 7,
+  "ok": true,
+  "blockedConnectionAttempts": 0,
+  "blockedFilesystemAttempts": 0,
+  "nodeExitCode": 0,
+  "nodeTests": 22,
+  "offlineIsolation": {
+    "backend": "macOS-sandbox-exec",
+    "freshProcesses": true,
+    "environmentCleared": true,
+    "temporaryData": true,
+    "descendantGuards": true,
+    "temporaryDataRemoved": true
+  }
+}

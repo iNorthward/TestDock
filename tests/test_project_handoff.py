@@ -25,9 +25,44 @@ class ProjectHandoffTests(unittest.TestCase):
         self.tasks.record('sample','scope',p,root=self.root)
         other=self.root/'real.json';other.write_text(json.dumps({'pack':'sample','ok':True,'scope':'real_readonly','realBusinessVerified':True,'caseIds':['R02']}))
         with self.assertRaises(ValueError):self.tasks.record('sample','real_readonly',other,root=self.root)
+
+    def test_replacing_scope_invalidates_prior_real_acceptance(self):
+        scope=self.evidence({'pack':'sample','authorizedReadOnly':True,'caseIds':['R01']})
+        self.tasks.record('sample','scope',scope,root=self.root)
+        real=self.root/'real.json'
+        real.write_text(json.dumps({'pack':'sample','ok':True,'scope':'real_readonly',
+                                    'realBusinessVerified':True,'caseIds':['R01']}))
+        self.assertTrue(self.tasks.record('sample','real_readonly',real,root=self.root)['realBusinessVerified'])
+        scope.write_text(json.dumps({'pack':'sample','authorizedReadOnly':True,'caseIds':['R02']}))
+        result=self.tasks.record('sample','scope',scope,root=self.root)
+        self.assertFalse(result['realBusinessVerified'])
+        self.assertEqual(next(t for t in result['tasks'] if t['id']=='real_readonly')['status'],'stale')
+
+    def test_case_ids_and_regression_evidence_require_raw_container_types(self):
+        for ids in ([True],[' '],['R01','R01'],[' R01']):
+            with self.subTest(ids=ids):
+                self.assertFalse(self.tasks.validate_evidence('sample','scope',
+                    {'pack':'sample','authorizedReadOnly':True,'caseIds':ids}))
+                self.assertFalse(self.tasks.validate_evidence('sample','real_readonly',
+                    {'pack':'sample','ok':True,'scope':'real_readonly','realBusinessVerified':True,'caseIds':ids}))
+        report={'ok':True,'testsRun':1,'groups':{'sample.adapter':True},
+                'offlineIsolation':{'temporaryDataRemoved':True}}
+        self.assertFalse(self.tasks.validate_evidence('sample','regression',report))
+        report['groups']=['sample.adapter'];report['offlineIsolation']=[]
+        self.assertFalse(self.tasks.validate_evidence('sample','regression',report))
     def test_state_cannot_escape_through_a_symlink(self):
         (self.root/'data').mkdir();(self.root/'data/sample').symlink_to(self.root.parent)
         with self.assertRaises(ValueError):self.tasks.init('sample',root=self.root)
+
+    def test_incomplete_or_corrupt_task_state_cannot_report_ready(self):
+        self.tasks.init('sample',root=self.root)
+        path=self.tasks.state_path('sample',self.root)
+        original=json.loads(path.read_text())
+        for value in ([],{**original,'tasks':[]},
+                      {**original,'tasks':[original['tasks'][0]]*len(original['tasks'])},
+                      {**original,'tasks':[{**row,'required':False} for row in original['tasks']]}):
+            path.write_text(json.dumps(value))
+            with self.subTest(value=value),self.assertRaises(ValueError):self.tasks.status('sample',root=self.root)
     def test_doctor_checks_configuration_without_exposing_values(self):
         doctor=script('project_doctor')
         pack=self.root/'packs/sample';(pack/'pack.json').write_text(json.dumps({'id':'sample','config_defaults':{'PLATFORM_PANEL_PORT':'8802','PLATFORM_PACK_DATA_DIR':'data/sample','PLATFORM_ARTIFACT_ROOT':'artifacts/sample'}}))

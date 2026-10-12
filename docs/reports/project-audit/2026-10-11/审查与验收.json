@@ -1,0 +1,147 @@
+{
+  "date": "2026-10-11",
+  "timezone": "Asia/Shanghai",
+  "overallStatus": "partial",
+  "scope": "平台可靠性、接入证据、请求边界、通用前端和发行；全仓静态扫描不等于逐行完整行为验证",
+  "attention": [
+    "真实认证、Apifox、数据库巡检和写入恢复未执行；需要所属 Pack、明确的只读案例授权范围和独立配置。",
+    "契约版本包的候选校验、单指针原子激活、回滚和执行绑定仍未补齐；当前两文件提交不能保证不持锁的读者获取一致视图。",
+    "Linux、压力测试、断电恢复和四种主题的完整视觉覆盖未执行；3 个页面自动无障碍扫描均有 1 类颜色检查需人工判断。",
+    "项目要求禁止全量业务案例和全部 unittest；本轮只执行明确受影响的定向组。"
+  ],
+  "redTeam": {
+    "missingInformation": [
+      "产品功能验收清单、目标用户与支持环境",
+      "生产负载、数据保留及故障恢复目标",
+      "真实业务契约、认证和数据清理授权"
+    ],
+    "optimisticAssumptions": [
+      "少量 mock 成功不能证明真实业务可靠",
+      "静态门禁和指纹不能证明线上版本一致",
+      "可信 Pack 的装载隔离不是恶意代码沙箱",
+      "一次审查不能证明所有边界都已穷尽"
+    ],
+    "irreversibleCosts": [
+      "真实写入、认证会话与审计记录未必可撤销",
+      "未经备份的历史迁移及契约基线覆盖可能丢失证据"
+    ],
+    "opportunityCosts": [
+      "盲目增加供应商和业务功能会挤占执行互斥、状态真实性、隔离与恢复的验证时间"
+    ],
+    "worstRisks": [
+      "错误成功状态掩盖未执行或失败",
+      "跨项目读写或误触真实写入",
+      "契约双文件在并发读取时出现不一致"
+    ],
+    "cognitiveBiases": [
+      "需防范确认偏误、急于求全、沉没成本及将测试数量当作覆盖率；未推断用户实际情绪"
+    ]
+  },
+  "supportCase": [
+    "已有明确 Core/Pack/Adapter 边界和原生离线隔离，可控制修复副作用",
+    "新增反例复现了错误成功、失效证据、请求歧义及缓存崩溃，修复收益有证据",
+    "恢复诊断入口与配置说明符合已有文档承诺，不需要引入未知业务策略"
+  ],
+  "neutralDecision": {
+    "advantage": "有证据的定向修复明显占优；无边界功能扩张及宣称整项目已完全可靠缺乏支持。不是五五开。",
+    "largestUnknown": "真实服务的认证、数据库会话、部署契约和写入恢复是否符合 Pack 声明。",
+    "reversalConditions": [
+      "若要求并发读取 OAS/wire 始终一致，契约版本包将从可延期功能变成上线前置条件",
+      "若真实只读验收暴露跨项目数据或不可恢复写入，应停止扩大执行范围，先恢复隔离和证据",
+      "若有明确功能验收清单且现有修复通过该环境验证，可继续扩展对应能力，不能依据 mock 外推"
+    ]
+  },
+  "fixed": [
+    {
+      "area": "证据接续",
+      "change": "真实验收绑定授权范围摘要，重新记录范围使旧验收过期；报告与摘要来自同一读取；拒绝缺项、重复或关闭必选项的任务清单及非法案例数组。"
+    },
+    {
+      "area": "持久任务",
+      "change": "缺少成功证据不再推断 done，明确失败优先；同步返回前检查取消和超时，保留已报告的操作失败。"
+    },
+    {
+      "area": "历史比较",
+      "change": "缺失指纹或证据集合不一致不标记可用；非法元数据/断言容器明确拒绝。"
+    },
+    {
+      "area": "请求保护",
+      "change": "拒绝重复保护请求头、无效来源 URL、重复 JSON 键、NaN/Infinity/溢出数值和截断正文。"
+    },
+    {
+      "area": "前端请求与流",
+      "change": "URL/Request 对象使用一致会话保护；接受分块 CRLF SSE 帧，终态主动释放读取器。"
+    },
+    {
+      "area": "工作台缓存",
+      "change": "损坏/禁用存储使用内存回退，验证同源标签 URL 与缓存形状；宽度与滚动位置验证有限数值。"
+    },
+    {
+      "area": "诊断功能入口",
+      "change": "Apifox、覆盖和数据库入口始终可见；未接入 Pack 显示配置说明并不执行巡检；日志入口保持按能力开放。"
+    },
+    {
+      "area": "无障碍",
+      "change": "默认主题说明文字对比度、诊断页 h1、侧栏分隔线范围/方向/值及地标归属修复。"
+    },
+    {
+      "area": "发行门禁",
+      "change": "清理历史报告的非中性名称残留，为工作台脚本和受影响样式登记回归映射。"
+    }
+  ],
+  "verification": {
+    "passed": {
+      "offline": "regression.json：148 项 Python，141 通过、7 跳过；22 项 JavaScript 全通过；最后侧栏调整单独复验见 ui-regression.json。",
+      "loopback": "http.json：离线跳过的 7 项自有回环 HTTP 测试单独执行全通过，业务 runner 模拟。",
+      "distribution": "distribution.json：9 项通过；不与其他组重复测试累加为独立覆盖。",
+      "integration": "integration.json：最终源码的双项目自有回环模拟服务验收 24 项通过，不是真实业务验收。",
+      "static": {
+        "ok": true,
+        "pythonFiles": 153,
+        "javascriptScripts": 13,
+        "errors": [],
+        "scope": "static syntax only; no business cases"
+      },
+      "browser": "缓存损坏反例修复后恢复标签和侧栏；指定 DEMO-R01 返回 passed/historySaved=true；历史展示及对比正常；三个诊断入口及未配置提示已实机确认。",
+      "a11y": "默认主题的案例/历史/数据库三页均 0 自动违规；每页 1 类颜色检查未自动完成。"
+    },
+    "failedBeforeFix": "reproduction.json：新增反例重现 24 个失败断言、4 个错误；不是 28 个独立缺陷。cache-reproduction.json 的 2 项 Node 反例也在修复前失败。",
+    "notExecuted": [
+      "真实业务接口和数据库",
+      "真实写入、性能压测、断电恢复",
+      "Linux 和全量案例",
+      "四种主题完整视觉验收"
+    ],
+    "harnessNotes": [
+      "第一次外层沙箱阻止启动离线 worker，未计通过；随后使用工具自身 macOS 原生隔离通过。",
+      "浏览器两次等待文本选择不匹配而超时；最终以可见 passed、historySaved 和历史页确认结果，不把错误等待计为应用失败。"
+    ]
+  },
+  "dataChanges": {
+    "businessWrites": 0,
+    "credentialsChanged": false,
+    "businessSourceModified": false,
+    "mainRuntimeDataModified": false,
+    "committed": false,
+    "pushed": false,
+    "ownedTemporaryServicesStopped": true,
+    "temporaryBrowserReleaseRemoved": true,
+    "notes": "平台源码、测试、文档和本报告发生变更；测试与 demo 历史只在自有临时目录，已清理。"
+  },
+  "evidenceFiles": [
+    "regression.json",
+    "ui-regression.json",
+    "http.json",
+    "distribution.json",
+    "integration.json",
+    "reproduction.json",
+    "cache-reproduction.json",
+    "a11y-case.json",
+    "a11y-history.json",
+    "a11y-database.json",
+    "cache-before.png",
+    "cache-after.png",
+    "diagnostics.png",
+    "syntax.json"
+  ]
+}

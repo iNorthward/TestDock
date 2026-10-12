@@ -126,3 +126,26 @@ class ExecutionJobsTests(unittest.TestCase):
                        {"request_key":"r"},{"metadata":[]},{"progress":[]}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError): self.create(**kwargs)
         self.assertFalse(self.store.path.exists())
+
+    def test_missing_success_evidence_never_marks_job_done(self):
+        for result in (None, {}, {'ok':None}, {'status':'incomplete','ok':None},
+                       {'status':'failed'}, {'ok':False,'status':'incomplete'}):
+            with self.subTest(result=result):
+                job=self.create()
+                self.store.finish(job['id'],result=result)
+                expected='failed' if isinstance(result,dict) and (result.get('ok') is False or result.get('status')=='failed') else 'incomplete'
+                self.assertEqual(self.store.get(job['id'])['status'],expected)
+        job=self.create();self.store.finish(job['id'],result={'status':'passed'})
+        self.assertEqual(self.store.get(job['id'])['status'],'done')
+
+    def test_synchronous_return_checks_pending_cancellation_and_timeout(self):
+        for reason in ('cancelled','timed_out'):
+            def operation():
+                control=jobs._CONTROL.get()
+                if reason=='cancelled':self.store.cancel(control.job_id)
+                else:control.deadline=0
+                return {'ok':True}
+            result=jobs.run_idempotent(kind='late-stop',request_id=reason,payload={},operation=operation)
+            self.assertEqual(result['executionStatus'],reason)
+            self.assertIsNone(result['ok'])
+            self.assertEqual(self.store.get(result['executionId'])['status'],reason)

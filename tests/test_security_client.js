@@ -30,6 +30,42 @@ test('failed session initialization blocks dispatch and may be retried', async (
   available=true;await fetch('/api/catalog');assert.equal(dispatched,1);
 });
 
+test('URL and Request fetch inputs receive the same API session protection', async () => {
+  const calls=[];
+  const fetch=createFetch(async (url,init={}) => {
+    calls.push([url,init]);return {ok:true,json:async()=>({token:'synthetic-session'})};
+  },{origin:'http://localhost:8801'});
+  await fetch(new URL('http://localhost:8801/api/catalog'));
+  const request=new Request('http://localhost:8801/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  await fetch(request);
+  assert.equal(calls.length,3);
+  for(const [,init] of calls.slice(1))assert.equal(init.headers.get('X-TestDock-Token'),'synthetic-session');
+  assert.equal(calls[2][0],request);
+  assert.equal(calls[2][1].headers.get('Content-Type'),'application/json');
+});
+
+test('SSE accepts split CRLF frames and releases an open stream at terminal event', async () => {
+  const {getEvents}=require('../assets/security-client.js');
+  const previous=global.fetch;
+  const encoder=new TextEncoder();let cancelled=false;
+  global.fetch=async()=>({ok:true,body:new ReadableStream({start(controller){
+    controller.enqueue(encoder.encode('data: {"type":"progress"}\r'));
+    controller.enqueue(encoder.encode('\n\r\ndata: {"type":"complete","result":{"ok":true}}\r\n\r\n'));
+  },cancel(){cancelled=true;}})});
+  try {
+    const kinds=[];
+    await new Promise((resolve,reject)=>{
+      const stream=getEvents('/api/error-log/run-stream');stream.onerror=reject;
+      stream.onmessage=event=>{const type=JSON.parse(event.data).type;kinds.push(type);if(type==='complete')resolve();};
+      const timer=setTimeout(()=>{stream.close();reject(new Error('SSE completion timed out'));},250);
+      const onmessage=stream.onmessage;
+      stream.onmessage=event=>{if(JSON.parse(event.data).type==='complete')clearTimeout(timer);onmessage(event);};
+    });
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.deepEqual(kinds,['progress','complete']);assert.equal(cancelled,true);
+  } finally {global.fetch=previous;}
+});
+
 test('POST SSE parses frames split across chunks and delivers terminal completion', async () => {
   const {postEvents} = require('../assets/security-client.js');
   const previous = global.fetch;
@@ -155,4 +191,32 @@ test('panel shows pending reload and refreshes after the catalog revision advanc
   assert.equal(refreshes,1);
   assert.equal(context.catalogRevision,8);
   assert.match(page,/setInterval\(pollCatalogRevision,1500\)/);
+});
+
+test('Core diagnostic tabs and deep links stay available without Pack capabilities', async () => {
+  const vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
+  const page=fs.readFileSync(path.join(__dirname,'../test-platform/insights.html'),'utf8');
+  const setup=page.slice(page.indexOf('const allowedTabs='),page.indexOf('function switchTab('));
+  const init=page.slice(page.indexOf('(async function init(){'),page.lastIndexOf('</script>'));
+  for(const diagnostics of [[],['contract','database','error_log'],null]) {
+    const tabs=['inspect','coverage','db-inspection','error-log'].map(tab=>({dataset:{tab},hidden:false}));
+    const context=vm.createContext({Set,URLSearchParams,location:{search:'?tab=db-inspection'},console,
+      loadStoredInspect(){},loadCaseIndex:async()=>{},fetch:async()=>{if(diagnostics===null)throw Error('unavailable');return {json:async()=>({data:{diagnostics}})};},
+      document:{querySelectorAll:()=>tabs},switchTab:name=>{context.selectedTab=name;}});
+    vm.runInContext(setup,context);await vm.runInContext(init,context);
+    assert.equal(context.selectedTab,'db-inspection');
+    for(const tab of tabs)assert.equal(tab.hidden,tab.dataset.tab==='error-log'&&!diagnostics?.includes('error_log'));
+  }
+});
+
+test('unconfigured diagnostics show setup guidance without offering execution',()=>{
+  const vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
+  const page=fs.readFileSync(path.join(__dirname,'../test-platform/insights.html'),'utf8');
+  const source=page.slice(page.indexOf('const allowedTabs='),page.indexOf('function switchTab('));
+  const box={replaceChildren(){this.children=[];},append(...nodes){this.children.push(...nodes);}};
+  const context=vm.createContext({Set,$:()=>box,el:tag=>({tag})});vm.runInContext(source,context);
+  assert.equal(context.showDiagnosticSetup('db-inspection','database'),true);
+  assert.match(box.children[1].textContent,/PLATFORM_DB_NAME/);
+  assert.match(box.children[1].textContent,/当前未执行巡检/);
+  assert.deepEqual(box.children.map(node=>node.tag),['h2','p','a']);
 });

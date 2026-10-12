@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import logging
+import math
 import time
 import os
 import secrets
@@ -485,7 +486,27 @@ class H(BaseHTTPRequestHandler):
 
     def _body(self):
         n = int(self.headers.get("Content-Length", 0))
-        return json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+        if not n:
+            return {}
+        raw = self.rfile.read(n)
+        if len(raw) != n:
+            raise ValueError("请求体不完整")
+        def pairs(items):
+            result = {}
+            for key, value in items:
+                if key in result:
+                    raise ValueError("请求 JSON 不允许重复键")
+                result[key] = value
+            return result
+        def finite_number(text):
+            value = float(text)
+            if not math.isfinite(value):
+                raise ValueError("请求 JSON 数字须为有限值")
+            return value
+        def reject_constant(text):
+            raise ValueError("请求 JSON 不允许非有限数字")
+        return json.loads(raw.decode("utf-8"), object_pairs_hook=pairs,
+                          parse_float=finite_number, parse_constant=reject_constant)
 
     def _serve_repo_asset(self, rel, *, asset_root=None):
         rel = rel.lstrip("/")

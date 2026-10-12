@@ -1,5 +1,6 @@
 """Focused regression for the reviewed correctness and security defects."""
 import contextlib
+from email.message import Message
 import http.client
 import io
 import json
@@ -27,6 +28,27 @@ import offline_process
 
 
 class PolicyTests(unittest.TestCase):
+    def test_malformed_origins_and_ambiguous_headers_are_rejected(self):
+        valid={'Host':'localhost:8801','X-TestDock-Token':'test-token','Content-Type':'application/json'}
+        for raw in ('http://[broken','http://localhost:8801/\nignored','http://localhost:8801/\tignored'):
+            with self.subTest(raw=raw),self.assertRaises(http_security.RequestRejected):
+                http_security.authorize({**valid,'Origin':raw},port=8801,token='test-token',api=True,mutation=True)
+        for header,value in (('Host','evil.example'),('Content-Length','2'),('Origin','http://evil.example'),
+                             ('X-TestDock-Token','other-token'),('Content-Type','text/plain')):
+            headers=Message()
+            for key,item in {**valid,'Content-Length':'2'}.items():headers[key]=item
+            headers[header]=value
+            with self.subTest(header=header),self.assertRaises(http_security.RequestRejected):
+                http_security.authorize(headers,port=8801,token='test-token',api=True,mutation=True)
+
+    def test_panel_body_rejects_nonfinite_duplicate_and_truncated_json(self):
+        for raw in (b'{"timeoutSeconds":NaN}',b'{"x":Infinity}',b'{"x":1e999}',
+                    b'{"id":"READ","id":"WRITE"}',b'{"nested":{"x":1,"x":2}}'):
+            handler=Mock(headers={'Content-Length':str(len(raw))},rfile=io.BytesIO(raw))
+            with self.subTest(raw=raw),self.assertRaises(ValueError):server.H._body(handler)
+        handler=Mock(headers={'Content-Length':'4'},rfile=io.BytesIO(b'{}'))
+        with self.assertRaises(ValueError):server.H._body(handler)
+
     def test_cross_site_host_token_and_body_policy(self):
         valid = {'Host':'localhost:8801', 'X-TestDock-Token':'test-token', 'Content-Type':'application/json'}
         http_security.authorize(valid, port=8801, token='test-token', api=True, mutation=True)
@@ -190,6 +212,14 @@ class RealPanelHTTPTests(unittest.TestCase):
                                    ({'Content-Length':'1048577'},413)]:
                 code,_=self.request('/api/run-case','POST','{}',headers)
                 self.assertEqual(code,status)
+            run.assert_not_called()
+
+    def test_malformed_json_and_origin_return_client_errors_before_execution(self):
+        with patch.object(server,'_run_panel_request') as run:
+            for body in ('{"timeoutSeconds":NaN}','{"x":Infinity}','{"x":1e999}',
+                         '{"id":"DEMO-R01","id":"OTHER"}'):
+                self.assertEqual(self.request('/api/run-case','POST',body)[0],400)
+            self.assertEqual(self.request('/api/session',headers={'Origin':'http://[broken'})[0],403)
             run.assert_not_called()
 
     def test_valid_page_session_read_and_post(self):

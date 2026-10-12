@@ -3,7 +3,7 @@
   function createFetch(original, {origin, session = null} = {}) {
     let credentials = session;
     return async function (input, init = {}) {
-      const target = new URL(typeof input === 'string' ? input : input.url, origin);
+      const target = new URL(typeof input === 'string' || input instanceof URL ? input : input.url, origin);
       if (target.origin !== origin || !target.pathname.startsWith('/api/') || target.pathname === '/api/session') {
         return original(input, init);
       }
@@ -38,16 +38,18 @@
         const {value, done} = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, {stream: true});
-        let end;
-        while ((end = buffer.indexOf('\n\n')) >= 0) {
-          const frame = buffer.slice(0, end); buffer = buffer.slice(end+2);
-          const data = frame.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+        let separator;
+        while ((separator = /\r?\n\r?\n/.exec(buffer)) !== null) {
+          const frame = buffer.slice(0, separator.index); buffer = buffer.slice(separator.index+separator[0].length);
+          const data = frame.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
           if (data) {
             const kind = JSON.parse(data).type;
             complete ||= kind === 'complete' || kind === 'error';
             stream.onmessage?.({data});
+            if (complete || controller.signal.aborted) break;
           }
         }
+        if (complete) break;
       } } finally {
         await reader.cancel();
         reader.releaseLock();

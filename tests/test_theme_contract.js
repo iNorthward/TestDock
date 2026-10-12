@@ -29,3 +29,35 @@ test('all four visible themes persist and emit a selection event',()=>{
 test('private storage does not stop theme rendering',()=>{
   const state=setup(null,true);assert.equal(state.attributes['data-theme'],'claude');state.context.PLATFORMTheme.setTheme('night');assert.equal(state.attributes['data-theme'],'night');
 });
+
+function workspace(stored='[]',denied=false) {
+  const events={},properties={},values=new Map([['testdock.workspace.tabs',stored]]);
+  const node=()=>({children:[],style:{},append(...items){this.children.push(...items);},
+    replaceChildren(){this.children=[];},setAttribute(key,value){this[key]=String(value);},
+    addEventListener(key,handler){this[key]=handler;}});
+  const tabs=node(),body=node();body.classList={add(){},remove(){}};
+  const storage={getItem:key=>{if(denied)throw Error('private storage');return values.get(key)||null;},
+    setItem:(key,value)=>{if(denied)throw Error('private storage');values.set(key,value);}};
+  const context={location:new URL('http://localhost:8801/'),URL,sessionStorage:storage,localStorage:storage,
+    document:{getElementById:()=>tabs,querySelector:()=>null,createElement:node,body,
+      documentElement:{style:{setProperty:(key,value)=>properties[key]=value}}},
+    addEventListener:(key,handler)=>events[key]=handler,setTimeout:handler=>handler(),scrollTo(){},scrollY:12};
+  context.window=context;vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../assets/workspace-shell.js'),'utf8'),context);
+  return {context,events,properties,values,tabs,body};
+}
+test('workspace recovers malformed storage and rejects unsafe cached tab links',()=>{
+  for(const stored of ['null','{}','"text"','[null,12,{"url":"javascript:alert(1)","title":"unsafe"}]']) {
+    const state=workspace(stored);
+    assert.equal(state.tabs.children.length,1);
+    assert.equal(state.tabs.children[0].children[0].href,'http://localhost:8801/');
+    assert.equal(state.properties['--sidebar-w'],'260px');
+  }
+});
+test('workspace remains usable when browser storage is denied',()=>{
+  const state=workspace('[]',true);
+  state.context.WorkspaceShell.open('http://localhost:8801/whitepaper','平台白皮书');
+  assert.equal(state.tabs.children.length,2);
+  state.events.pagehide();state.events.load();
+  assert.equal(state.properties['--sidebar-w'],'260px');
+});

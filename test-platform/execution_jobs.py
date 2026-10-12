@@ -172,9 +172,15 @@ class JobStore:
 
     def finish(self, job_id, *, result=None, error=None, status=None):
         if status is None:
-            status = "failed" if error or isinstance(result, dict) and (result.get("ok") is False or result.get("error")) else "done"
-            if isinstance(result, dict) and result.get("status") in ("incomplete", "skipped"):
+            failed = bool(error) or isinstance(result, dict) and (result.get("ok") is False or result.get("status") == "failed")
+            status = "failed" if failed else "incomplete"
+            if not failed and isinstance(result, dict) and result.get("status") in ("incomplete", "skipped"):
                 status = result["status"]
+            elif not failed and isinstance(result, dict):
+                if result.get("error"):
+                    status = "failed"
+                elif result.get("ok") is True or result.get("status") == "passed":
+                    status = "done"
             if isinstance(result,dict) and result.get('executionStatus') in ('cancelled','timed_out') and result.get('ok') is not True:
                 status = result['executionStatus']
         if status not in TERMINAL:
@@ -327,6 +333,10 @@ def run_idempotent(*, kind, request_id, payload, operation, metadata=None, timeo
     try:
         with get_executor().synchronous_slot(), control_context(job["id"], store=store):
             result = operation()
+            # Match the background worker's final checkpoint, retaining failures.
+            if (isinstance(result, dict) and result.get('executionStatus') not in ('cancelled','timed_out')
+                    and result.get('ok') is not False and not result.get('error')):
+                checkpoint()
         result = {**result, "executionId": job["id"]}
         store.finish(job["id"], result=result)
         return result

@@ -298,6 +298,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </div>
   </header>
   <main>
+    <h1>平台诊断</h1>
     <nav class="ins-tabs" aria-label="诊断功能">
       <button type="button" class="ins-tab" data-tab="env-preflight">环境预检</button>
       <button type="button" class="ins-tab" data-tab="inspect">Apifox 巡检</button>
@@ -356,8 +357,20 @@ async function loadCaseIndex(){
   }catch(e){console.warn('catalog lite',e);}
 }
 
-// Optional diagnostics require the selected Pack capability.
-const allowedTabs=new Set(['env-preflight','validate','history','flaky']);
+// Core diagnostic entry points stay visible; execution still requires Pack setup.
+const allowedTabs=new Set(['env-preflight','validate','history','flaky','inspect','coverage','db-inspection']);
+let diagnosticCapabilities=new Set();
+function showDiagnosticSetup(tab,capability){
+  if(diagnosticCapabilities.has(capability))return false;
+  const box=$('#tab-'+tab);box.replaceChildren();
+  const heading=el('h2');heading.textContent=tab==='inspect'?'Apifox 巡检':tab==='coverage'?'接口覆盖':'数据库巡检';
+  const notice=el('p','ins-empty-state');
+  notice.textContent=capability==='contract'
+    ? '当前 Pack 尚未接入契约诊断。请在 pack.json 的 diagnostic_capabilities 声明 contract，并提供本项目 APIFOX_PROJECT_ID、APIFOX_ACCESS_TOKEN、PLATFORM_APIFOX_API_BASE、PLATFORM_APIFOX_INDEX、PLATFORM_OAS_BASELINE 与独立数据/报告目录。配置后重启并重新体检；当前未执行巡检。'
+    : '当前 Pack 尚未接入数据库诊断。请在 pack.json 的 diagnostic_capabilities 声明 database，并提供本项目 PLATFORM_DB_HOST、PLATFORM_DB_USER、PLATFORM_DB_PASSWORD、PLATFORM_DB_NAME、PLATFORM_SCHEMA_JSON 与独立数据/报告目录。配置后重启并重新体检；当前未执行巡检。';
+  const link=el('a');link.href='/docs/onboarding/AGENT_INTEGRATION.md';link.textContent='查看项目接入手册';
+  box.append(heading,notice,link);return true;
+}
 function switchTab(name){
   if(!allowedTabs.has(name))name='validate';
   if(activeTab==='db-inspection'&&name!=='db-inspection') abortDbInspectionStreams();
@@ -567,6 +580,7 @@ function showDbPatrolResult(result){
 
 async function loadDbInspection(){
   abortDbInspectionStreams();
+  if(showDiagnosticSetup('db-inspection','database'))return;
   const box=$('#tab-db-inspection');
   box.innerHTML='<div class="empty">加载巡检记录…</div>';
 
@@ -1377,6 +1391,7 @@ function setPlanStepState(id,state){
 }
 
 function renderInspectTab(){
+  if(showDiagnosticSetup('inspect','contract'))return;
   const box=$('#tab-inspect');
   const stack=insModStackEl(box);
 
@@ -1780,6 +1795,7 @@ function renderCaseLinksCell(ids){
   return tdC;
 }
 async function loadCoverage(){
+  if(showDiagnosticSetup('coverage','contract'))return;
   const box=$('#tab-coverage');
   let coverageError='';
   try{COV=await api('/api/coverage');}catch(e){COV=null;coverageError=e.message||String(e);}
@@ -2611,6 +2627,7 @@ function runErrorLogAudit(){
     const response=await fetch('/api/platform');
     const payload=await response.json();
     const capabilities=payload.data?.diagnostics||[];
+    diagnosticCapabilities=new Set(Array.isArray(capabilities)?capabilities:[]);
     if(capabilities.includes('contract')){allowedTabs.add('inspect');allowedTabs.add('coverage');}
     if(capabilities.includes('database'))allowedTabs.add('db-inspection');
     if(capabilities.includes('error_log'))allowedTabs.add('error-log');

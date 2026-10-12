@@ -76,6 +76,6 @@ python3 scripts/project_tasks.py --pack sample_app init --require-real
 
 ## 面板请求保护
 
-面板仅监听回环地址。页面自动获取进程会话 token，API 请求须带 `X-TestDock-Token`；脚本先同源读取 `/api/session`。非同源 Origin/Referer、非法 Host 和非 JSON POST 会被拒绝，请求体上限 1 MiB。LIVE 同时要求启动环境显式设置 `PLATFORM_ALLOW_LIVE=1`，请求 `confirmLive` 等于案例 ID 或 suite；不指定 suite 时等于 `all`。原有 Pack 的逐例写入授权仍然有效。服务重启后刷新页面获取新 token。
+面板仅监听回环地址。页面自动获取进程会话 token，API 请求须带 `X-TestDock-Token`；脚本先同源读取 `/api/session`。非同源 Origin/Referer、非法 Host 和非 JSON POST 会被拒绝，请求体上限 1 MiB。保护请求头不得重复；JSON 请求拒绝重复键、非有限数字及不完整正文。LIVE 同时要求启动环境显式设置 `PLATFORM_ALLOW_LIVE=1`，请求 `confirmLive` 等于案例 ID 或 suite；不指定 suite 时等于 `all`。原有 Pack 的逐例写入授权仍然有效。服务重启后刷新页面获取新 token。
 
 运行 `bash scripts/check.sh` 执行静态门禁及变更影响的离线回归；真实 HTTP 安全测试和双项目模拟验收独立执行。选测组叠加覆盖全部 Python 测试模块时，门禁会拒绝执行，应缩小 `--group` / `--file` 范围，不能把自动选择当作全量执行授权。发行 SHA-256 收据只由 `export_platform.py` 在导出目录生成，源码目录不维护过期收据。资源池可用 `password_ref: "env:MY_PASSWORD"`，默认密码可用 `settings.default_password_ref`；引用未配置时明确报未完成，不静默回退明文密码。

@@ -14,6 +14,11 @@ class RequestRejected(ValueError):
 
 
 def authorize(headers, *, port, token, api=False, session=False, mutation=False):
+    if hasattr(headers, 'get_all'):
+        for name in ('Host','Origin','Referer','Sec-Fetch-Site','X-TestDock-Token',
+                     'Content-Type','Content-Length','Transfer-Encoding'):
+            if len(headers.get_all(name, [])) > 1:
+                raise RequestRejected(400, "请求保护头不得重复")
     authorities = {f"127.0.0.1:{port}", f"localhost:{port}"}
     host = headers.get("Host", "").lower()
     if host not in authorities:
@@ -23,7 +28,12 @@ def authorize(headers, *, port, token, api=False, session=False, mutation=False)
     for name in ("Origin", "Referer"):
         raw = headers.get(name)
         if raw is not None:
-            parsed = urlsplit(raw)
+            if any(ord(char) < 32 or ord(char) == 127 for char in raw):
+                raise RequestRejected(403, "来源 URL 无效")
+            try:
+                parsed = urlsplit(raw)
+            except ValueError as exc:
+                raise RequestRejected(403, "来源 URL 无效") from exc
             if (parsed.scheme != "http" or parsed.netloc.lower() != host
                     or parsed.username is not None or parsed.password is not None):
                 raise RequestRejected(403, "仅允许同源访问")
@@ -38,7 +48,7 @@ def authorize(headers, *, port, token, api=False, session=False, mutation=False)
         if headers.get("Transfer-Encoding"):
             raise RequestRejected(400, "不支持 Transfer-Encoding")
         raw_length = headers.get("Content-Length", "0")
-        if not raw_length.isascii() or not raw_length.isdecimal():
+        if len(raw_length) > 20 or not raw_length.isascii() or not raw_length.isdecimal():
             raise RequestRejected(400, "Content-Length 无效")
         if int(raw_length) > MAX_BODY_BYTES:
             raise RequestRejected(413, "请求体超过 1 MiB")

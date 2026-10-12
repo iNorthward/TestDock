@@ -1,0 +1,9 @@
+{
+  "scope": "owned loopback HTTP request tests; runners mocked",
+  "testsRun": 7,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "ok": true,
+  "businessCasesExecuted": 0
+}

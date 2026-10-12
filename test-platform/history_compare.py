@@ -12,7 +12,9 @@ def _cases(run):
 
 def _assertions(case):
     result={};occurrences={}
-    for index,row in enumerate(case.get('subs',[])):
+    values=case.get('subs',[])
+    if not isinstance(values,list):raise ValueError('history assertions must be an array')
+    for index,row in enumerate(values):
         if not isinstance(row,dict):continue
         label=str(row.get('label',index));occurrences[label]=occurrences.get(label,0)+1
         result[(label,occurrences[label])]=redact_secrets({k:row.get(k) for k in ('ok','status','detail')})
@@ -21,6 +23,7 @@ def _assertions(case):
 def compare_runs(before,after):
     if not isinstance(before,dict) or not isinstance(after,dict):raise ValueError('both history runs must exist')
     left=before.get('executionMetadata',{});right=after.get('executionMetadata',{})
+    if not isinstance(left,dict) or not isinstance(right,dict):raise ValueError('history execution metadata must be an object')
     if left.get('packId') and right.get('packId') and left['packId']!=right['packId']:raise ValueError('cannot compare different Pack histories')
     old,new=_cases(before),_cases(after);changes=[];unchanged=0
     for identifier in sorted(old.keys()|new.keys()):
@@ -34,9 +37,11 @@ def compare_runs(before,after):
             changes.append({'id':identifier,'kind':'changed','beforeStatus':a.get('status'),'afterStatus':b.get('status'),'assertionChanges':assertions})
         else:unchanged+=1
     lc,rc=left.get('contractFingerprints',{}),right.get('contractFingerprints',{})
+    if not isinstance(lc,dict) or not isinstance(rc,dict):raise ValueError('history contract fingerprints must be an object')
     contracts=[{'label':name,'before':lc.get(name),'after':rc.get(name)} for name in sorted(lc.keys()|rc.keys()) if lc.get(name)!=rc.get(name)]
     return {'beforeRunId':before.get('id'),'afterRunId':after.get('id'),'unchangedCases':unchanged,'changes':changes,
-            'contractChanges':contracts,'contractEvidenceAvailable':bool(lc) and bool(rc),
+            'contractChanges':contracts,'contractEvidenceAvailable':bool(lc) and lc.keys()==rc.keys()
+                and all(isinstance(v,str) and bool(v) for v in [*lc.values(),*rc.values()]),
             'codeChanged':left.get('codeFingerprint')!=right.get('codeFingerprint') if left.get('codeFingerprint') and right.get('codeFingerprint') else None,
             'packEvidenceAvailable':bool(left.get('packId')) and bool(right.get('packId')),
             'note':'Contract/code drift is correlation evidence, not proof of the failure cause. Missing historical fingerprints are not inferred.'}

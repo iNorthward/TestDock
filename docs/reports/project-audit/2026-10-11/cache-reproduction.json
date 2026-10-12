@@ -1,0 +1,33 @@
+{
+  "groups": [
+    "execution-ui"
+  ],
+  "python": [
+    "test_panel_pack_labels"
+  ],
+  "javascript": [
+    "tests/test_execution_client.js",
+    "tests/test_security_client.js",
+    "tests/test_theme_contract.js"
+  ],
+  "unmappedSources": [],
+  "sourceMapping": {},
+  "businessCasesExecuted": 0,
+  "testsRun": 2,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "ok": false,
+  "blockedConnectionAttempts": 0,
+  "blockedFilesystemAttempts": 0,
+  "nodeExitCode": 1,
+  "nodeTests": 20,
+  "offlineIsolation": {
+    "backend": "macOS-sandbox-exec",
+    "freshProcesses": true,
+    "environmentCleared": true,
+    "temporaryData": true,
+    "descendantGuards": true,
+    "temporaryDataRemoved": true
+  }
+}
