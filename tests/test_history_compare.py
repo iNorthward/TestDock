@@ -32,3 +32,22 @@ class HistoryCompareTests(unittest.TestCase):
         for field,value in (('executionMetadata',None),('executionMetadata',[]),('cases',None)):
             a=self.run_data();a[field]=value
             with self.subTest(field=field,value=value),self.assertRaises(ValueError):compare_runs(a,self.run_data())
+
+    def test_runtime_snapshot_and_legacy_disk_fingerprint_are_not_mixed(self):
+        a=self.run_data();b=self.run_data()
+        b['executionMetadata']['codeEvidence']={'basis':'catalog-load-source-snapshot','status':'captured'}
+        d=compare_runs(a,b)
+        self.assertIsNone(d['codeChanged'])
+        self.assertFalse(d['codeEvidenceAvailable'])
+        a['executionMetadata']['codeEvidence']={'basis':'catalog-load-source-snapshot','status':'captured'}
+        a['executionMetadata']['diskCodeFingerprint']='disk-v1'
+        b['executionMetadata']['diskCodeFingerprint']='disk-v2'
+        a['executionMetadata']['codeDrift']=False
+        b['executionMetadata']['codeDrift']=True
+        d=compare_runs(a,b)
+        self.assertFalse(d['codeChanged'])
+        self.assertTrue(d['diskCodeChanged'])
+        self.assertTrue(d['afterCodeDrift'])
+        self.assertTrue(d['codeEvidenceAvailable'])
+        b['executionMetadata']['codeEvidence']['status']='unknown'
+        self.assertIsNone(compare_runs(a,b)['codeChanged'])

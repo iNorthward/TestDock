@@ -1,0 +1,31 @@
+{
+  "groups": [],
+  "python": [
+    "test_execution_safety_fixes",
+    "test_execution_shutdown"
+  ],
+  "javascript": [],
+  "unmappedSources": [],
+  "sourceMapping": {
+    "tests/test_execution_safety_fixes.py": [],
+    "tests/test_execution_shutdown.py": []
+  },
+  "businessCasesExecuted": 0,
+  "testsRun": 10,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "ok": true,
+  "blockedConnectionAttempts": 0,
+  "blockedFilesystemAttempts": 0,
+  "nodeExitCode": null,
+  "nodeTests": 0,
+  "offlineIsolation": {
+    "backend": "macOS-sandbox-exec",
+    "freshProcesses": true,
+    "environmentCleared": true,
+    "temporaryData": true,
+    "descendantGuards": true,
+    "temporaryDataRemoved": true
+  }
+}

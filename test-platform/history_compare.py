@@ -20,6 +20,13 @@ def _assertions(case):
         result[(label,occurrences[label])]=redact_secrets({k:row.get(k) for k in ('ok','status','detail')})
     return result
 
+def _code_basis(metadata):
+    evidence=metadata.get('codeEvidence')
+    if evidence is None:
+        return 'legacy-disk-snapshot'
+    if not isinstance(evidence,dict):raise ValueError('history code evidence must be an object')
+    return evidence.get('basis') if evidence.get('status')=='captured' else None
+
 def compare_runs(before,after):
     if not isinstance(before,dict) or not isinstance(after,dict):raise ValueError('both history runs must exist')
     left=before.get('executionMetadata',{});right=after.get('executionMetadata',{})
@@ -39,9 +46,14 @@ def compare_runs(before,after):
     lc,rc=left.get('contractFingerprints',{}),right.get('contractFingerprints',{})
     if not isinstance(lc,dict) or not isinstance(rc,dict):raise ValueError('history contract fingerprints must be an object')
     contracts=[{'label':name,'before':lc.get(name),'after':rc.get(name)} for name in sorted(lc.keys()|rc.keys()) if lc.get(name)!=rc.get(name)]
+    lb,rb=_code_basis(left),_code_basis(right)
+    code_available=bool(left.get('codeFingerprint')) and bool(right.get('codeFingerprint')) and bool(lb) and lb==rb
     return {'beforeRunId':before.get('id'),'afterRunId':after.get('id'),'unchangedCases':unchanged,'changes':changes,
             'contractChanges':contracts,'contractEvidenceAvailable':bool(lc) and lc.keys()==rc.keys()
                 and all(isinstance(v,str) and bool(v) for v in [*lc.values(),*rc.values()]),
-            'codeChanged':left.get('codeFingerprint')!=right.get('codeFingerprint') if left.get('codeFingerprint') and right.get('codeFingerprint') else None,
+            'codeChanged':left.get('codeFingerprint')!=right.get('codeFingerprint') if code_available else None,
+            'codeEvidenceAvailable':code_available,'codeEvidenceBasis':lb if code_available else None,
+            'diskCodeChanged':left.get('diskCodeFingerprint')!=right.get('diskCodeFingerprint') if left.get('diskCodeFingerprint') and right.get('diskCodeFingerprint') else None,
+            'beforeCodeDrift':left.get('codeDrift'),'afterCodeDrift':right.get('codeDrift'),
             'packEvidenceAvailable':bool(left.get('packId')) and bool(right.get('packId')),
-            'note':'Contract/code drift is correlation evidence, not proof of the failure cause. Missing historical fingerprints are not inferred.'}
+            'note':'Contract/code drift is correlation evidence, not proof of the failure cause. Missing historical fingerprints are not inferred. Code fingerprints with different evidence bases are not compared; contract fingerprints describe disk contents, not the snapshot consumed by a runner.'}

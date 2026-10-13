@@ -46,3 +46,8 @@ class BoundedExecutor:
         with self._condition:self._closed=True;self._condition.notify_all()
         if wait:
             for thread in self._threads:thread.join()
+            self.wait_idle()
+    def wait_idle(self):
+        with self._condition:
+            while self._running or self._queue:
+                self._condition.wait(.1)

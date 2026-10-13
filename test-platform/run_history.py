@@ -183,6 +183,11 @@ def record_run(result, source="panel", duration_ms=None, metadata=None):
     encoded_metadata = json.dumps(redact_secrets(execution_metadata), ensure_ascii=False, allow_nan=False)
     now = int(time.time())
     counts = summarize_cases(cases)
+    if result.get("executionStatus") in ("cancelled", "timed_out", "interrupted") and not counts["failed"]:
+        counts["status"] = "incomplete"
+    if result.get("executionStatus"):
+        execution_metadata = {**execution_metadata, "executionStatus": result["executionStatus"]}
+        encoded_metadata = json.dumps(redact_secrets(execution_metadata), ensure_ascii=False, allow_nan=False)
     with _LOCK, _conn() as conn:
         cur = conn.execute(
             """INSERT INTO runs(ts, mode, suite, source, passed, failed, skipped,
@@ -213,6 +218,7 @@ def record_case(case_result, source="panel", mode="safe", duration_ms=None, meta
     ok = 1 if normalized.get("status") == "passed" else 0
     return record_run(
         {"mode": mode, "suite": normalized.get("suite"), "cases": [normalized],
+         "executionStatus": case_result.get("executionStatus"),
          "passed": ok, "total": 1},
         source=source, duration_ms=duration_ms,
         metadata=metadata if metadata is not None else case_result.get("executionMetadata"),

@@ -1,0 +1,116 @@
+{
+  "groups": [
+    "execution",
+    "execution-ui",
+    "gate",
+    "isolation",
+    "review-fixes"
+  ],
+  "python": [
+    "test_audit_fixes",
+    "test_background_execution",
+    "test_catalog_import_bootstrap",
+    "test_catalog_run",
+    "test_db_config",
+    "test_env_config_lazy",
+    "test_execution_entrypoints",
+    "test_execution_guard",
+    "test_execution_jobs",
+    "test_execution_provenance",
+    "test_execution_queue",
+    "test_execution_safety_fixes",
+    "test_execution_shutdown",
+    "test_history_compare",
+    "test_insights_actions",
+    "test_isolated_runner",
+    "test_offline_regression_isolation",
+    "test_panel_pack_labels",
+    "test_platform_isolation",
+    "test_platform_launch_isolation",
+    "test_platform_portability",
+    "test_platform_protocol",
+    "test_project_config_isolation",
+    "test_recheck_fixes",
+    "test_resource_pool_capabilities",
+    "test_run_history",
+    "test_run_history_query_bounds",
+    "test_server_duration_clock",
+    "test_sync_agent_rules",
+    "test_targeted_regression"
+  ],
+  "javascript": [
+    "tests/test_execution_client.js",
+    "tests/test_security_client.js",
+    "tests/test_theme_contract.js"
+  ],
+  "unmappedSources": [],
+  "sourceMapping": {
+    "README.md": [],
+    "assets/execution-client.js": [
+      "execution-ui"
+    ],
+    "docs/architecture/平台执行隔离与任务规范.md": [],
+    "docs/onboarding/AGENT_OPERATIONS.md": [
+      "review-fixes"
+    ],
+    "docs/reports/execution-boundary-fixes/2026-10-13/回环HTTP首轮异常.json": [],
+    "docs/reports/execution-boundary-fixes/2026-10-13/回环HTTP验证.json": [],
+    "docs/reports/execution-boundary-fixes/2026-10-13/独立模拟接入验收.json": [],
+    "docs/reports/execution-boundary-fixes/2026-10-13/组合定向回归.json": [],
+    "docs/reports/execution-boundary-fixes/2026-10-13/首轮定向验证.json": [],
+    "resources/targeted-regression.json": [
+      "gate"
+    ],
+    "start.sh": [
+      "isolation"
+    ],
+    "test-platform/catalog.py": [
+      "execution"
+    ],
+    "test-platform/execution_jobs.py": [
+      "execution"
+    ],
+    "test-platform/execution_provenance.py": [
+      "execution"
+    ],
+    "test-platform/execution_queue.py": [
+      "execution"
+    ],
+    "test-platform/history_compare.py": [
+      "execution"
+    ],
+    "test-platform/panel.html": [
+      "execution-ui"
+    ],
+    "test-platform/run_history.py": [
+      "execution"
+    ],
+    "test-platform/server.py": [
+      "execution"
+    ],
+    "tests/test_execution_client.js": [],
+    "tests/test_execution_jobs.py": [],
+    "tests/test_execution_provenance.py": [],
+    "tests/test_execution_safety_fixes.py": [],
+    "tests/test_execution_shutdown.py": [],
+    "tests/test_history_compare.py": []
+  },
+  "businessCasesExecuted": 0,
+  "testsRun": 211,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 10,
+  "ok": true,
+  "blockedConnectionAttempts": 0,
+  "blockedFilesystemAttempts": 0,
+  "nodeExitCode": 0,
+  "nodeTests": 38,
+  "offlineIsolation": {
+    "backend": "macOS-sandbox-exec",
+    "freshProcesses": true,
+    "environmentCleared": true,
+    "temporaryData": true,
+    "descendantGuards": true,
+    "temporaryDataRemoved": true
+  }
+}

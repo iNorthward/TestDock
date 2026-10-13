@@ -78,4 +78,6 @@ python3 scripts/project_tasks.py --pack sample_app init --require-real
 
 面板仅监听回环地址。页面自动获取进程会话 token，API 请求须带 `X-TestDock-Token`；脚本先同源读取 `/api/session`。非同源 Origin/Referer、非法 Host 和非 JSON POST 会被拒绝，请求体上限 1 MiB。保护请求头不得重复；JSON 请求拒绝重复键、非有限数字及不完整正文。LIVE 同时要求启动环境显式设置 `PLATFORM_ALLOW_LIVE=1`，请求 `confirmLive` 等于案例 ID 或 suite；不指定 suite 时等于 `all`。原有 Pack 的逐例写入授权仍然有效。服务重启后刷新页面获取新 token。
 
+执行请求使用 `requestId` 去重。页面会话存储仅保存参数摘要、请求标识与已获知的任务标识，不保存明文凭据；网络中断或结果未知时，即使超过 24 小时，相同参数的手动重试仍沿用原标识，确认终态后才释放。刷新可恢复当前页面会话中的记录，不会自动重发写操作。关闭标签页或窗口、清除会话存储后，这些标识无法保证恢复；会话存储或 SHA-256 不可用时仅保存在页面内存中。遇到这些情况须先核验业务状态，再决定是否使用新标识执行。
+
 运行 `bash scripts/check.sh` 执行静态门禁及变更影响的离线回归；真实 HTTP 安全测试和双项目模拟验收独立执行。选测组叠加覆盖全部 Python 测试模块时，门禁会拒绝执行，应缩小 `--group` / `--file` 范围，不能把自动选择当作全量执行授权。发行 SHA-256 收据只由 `export_platform.py` 在导出目录生成，源码目录不维护过期收据。资源池可用 `password_ref: "env:MY_PASSWORD"`，默认密码可用 `settings.default_password_ref`；引用未配置时明确报未完成，不静默回退明文密码。

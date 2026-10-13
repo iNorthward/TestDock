@@ -16,7 +16,10 @@ import math
 import time
 import os
 import secrets
+import signal
+import socket
 import uuid
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse, unquote
@@ -42,6 +45,7 @@ PANEL_HTML = panel_html_path(cat.PACKS)
 import run_history as rh  # noqa: E402
 import execution_jobs as jobs  # noqa: E402
 from execution_provenance import execution_metadata  # noqa: E402
+from identity_pool import redact_secrets  # noqa: E402
 
 from http_security import authorize, RequestRejected
 
@@ -265,7 +269,7 @@ def _start_catalog_watcher():
                     print("[catalog] auto-reload revision=%s cases=%s" % (
                         info.get("revision"), info.get("cases")))
             except Exception as exception:
-                print("[catalog] watch error:", exception)
+                logging.getLogger(__name__).error("目录监听失败：%s", redact_secrets(str(exception)))
 
     threading.Thread(target=loop, name="catalog-watcher", daemon=True).start()
 
@@ -297,7 +301,7 @@ def _save_schema_patrol_result(result):
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         cache_file.write_text(json.dumps(result, ensure_ascii=False, default=str), encoding="utf-8")
     except Exception as e:
-        print(f"[db-schema-patrol] 缓存失败: {e}")
+        logging.getLogger(__name__).error("数据库巡检缓存失败：%s", redact_secrets(str(e)))
 
 
 def _schema_patrol_sse(handler, max_workers=16):
@@ -422,10 +426,64 @@ class PanelHTTPServer(ThreadingHTTPServer):
 
     def __init__(self, address, handler):
         self.session_token = secrets.token_urlsafe(32)
+        self._lifecycle_condition = threading.Condition()
+        self._active_mutations = 0
+        self._stopping = False
+        self._shutdown_thread = None
+        self._shutdown_error = None
         super().__init__(address, handler)
+
+    @contextmanager
+    def mutation_slot(self):
+        with self._lifecycle_condition:
+            allowed = not self._stopping
+            if allowed:
+                self._active_mutations += 1
+        try:
+            yield allowed
+        finally:
+            if allowed:
+                with self._lifecycle_condition:
+                    self._active_mutations -= 1
+                    self._lifecycle_condition.notify_all()
+
+    def request_shutdown(self):
+        with self._lifecycle_condition:
+            if self._shutdown_thread is not None and self._shutdown_thread.is_alive():
+                return
+            self._stopping = True
+            self._shutdown_error = None
+            self._shutdown_thread = threading.Thread(
+                target=self._drain_shutdown, name="panel-shutdown", daemon=False)
+            self._shutdown_thread.start()
+
+    def _drain_shutdown(self):
+        try:
+            jobs.begin_shutdown()
+            with self._lifecycle_condition:
+                while self._active_mutations:
+                    self._lifecycle_condition.wait(.1)
+            jobs.wait_for_shutdown()
+        except Exception as exc:
+            # A shutdown failure must not pretend that business cleanup finished.
+            self._shutdown_error = redact_secrets(str(exc))
+            logging.getLogger(__name__).error("停止清理失败，服务保留运行以便核验：%s", self._shutdown_error)
+            return
+        self.shutdown()
+
+    def wait_for_shutdown(self):
+        if self._shutdown_thread is not None:
+            self._shutdown_thread.join()
 
 
 class H(BaseHTTPRequestHandler):
+    io_timeout_seconds = 10
+
+    def setup(self):
+        super().setup()
+        # An incomplete body or a blocked response must not hold shutdown forever.
+        self.connection.settimeout(self.io_timeout_seconds)
+
     def log_message(self, format_string, *args):
         # Do not log query strings, headers, credentials or request bodies.
         logging.getLogger(__name__).info("request=%s method=%s status=%s",
@@ -467,9 +525,10 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _json(self, code, payload, no_cache=True):
-        if code >= 500:
+        known_stop = code == 503 and payload.get("status") == "incomplete" and payload.get("ok") is None
+        if code >= 500 and not known_stop:
             request_id = getattr(self, "request_id", uuid.uuid4().hex)
-            logging.getLogger(__name__).error("request=%s internal_error=%r", request_id, payload.get("error"))
+            logging.getLogger(__name__).error("request=%s internal_error=%r", request_id, redact_secrets(payload.get("error")))
             payload = {"ok": False, "error": "服务内部错误，请查看服务日志", "requestId": request_id}
         b = jdump(payload)
         self.send_response(code)
@@ -488,7 +547,11 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", 0))
         if not n:
             return {}
-        raw = self.rfile.read(n)
+        try:
+            raw = self.rfile.read(n)
+        except (TimeoutError, socket.timeout) as exc:
+            self.close_connection = True
+            raise RequestRejected(408, "请求体读取超时，操作未开始") from exc
         if len(raw) != n:
             raise ValueError("请求体不完整")
         def pairs(items):
@@ -830,7 +893,11 @@ class H(BaseHTTPRequestHandler):
         if not self._authorize(mutation=True):
             return
         try:
-            self._dispatch_POST()
+            with self.server.mutation_slot() as allowed:
+                if not allowed:
+                    self._json(503, {"ok": None, "status": "incomplete", "error": "服务正在等待任务清理，请稍后重试"})
+                    return
+                self._dispatch_POST()
         except (BrokenPipeError, ConnectionResetError):
             logging.getLogger(__name__).info("request=%s disconnected", self.request_id)
 
@@ -883,8 +950,7 @@ class H(BaseHTTPRequestHandler):
                     result["timestamp"] = int(time.time())
                     self._json(200, result)
                 except Exception as e:
-                    import traceback
-                    traceback.print_exc()
+                    logging.getLogger(__name__).error("数据库结构同步失败：%s", redact_secrets(str(e)))
                     self._json(500, {"ok": False, "error": str(e)})
             elif path == "/api/apifox/sync":
                 script = REPO / "scripts" / "run_apifox_inspection.py"
@@ -918,12 +984,15 @@ class H(BaseHTTPRequestHandler):
                 self._json(404, {"ok": False, "error": "not found"})
         except jobs.RequestConflict as e:
             self._json(409, {"ok": False, "error": str(e)})
+        except RequestRejected as e:
+            self._json(e.status, {"ok": None, "status": "incomplete", "error": str(e)})
         except ValueError as e:
             self._json(400, {"ok": False, "error": str(e)})
         except Exception as e:
             self._json(500, {"ok": False, "error": str(e)})
 
 
+@cat.registry_read
 def _validate_panel_execution(data, *, batch):
     mode = data.get("mode", "safe")
     if mode not in ("safe", "live"):
@@ -932,7 +1001,10 @@ def _validate_panel_execution(data, *, batch):
         suite = data.get("suite")
         if suite is not None and (not isinstance(suite, str) or suite not in {s["id"] for s in cat.SUITES}):
             raise ValueError("suite 不存在")
-        live = mode == "live"
+        live = mode == "live" or any(
+            case.get("requires_write_opt_in") or case.get("requires_unscoped_write_opt_in")
+            for case in cat.selected_cases(mode, suite)
+        )
         confirmation = suite or "all"
     else:
         case_id = data.get("id")
@@ -962,6 +1034,11 @@ def _run_panel_request(data, *, batch):
         result = (cat.run_all(data.get("mode", "safe"), data.get("suite"), execution_options=options)
                   if batch else cat.exec_case(data.get("id"), execution_options=options))
         result = dict(result)
+        if not (result.get("ok") is False or result.get("status") == "failed" or result.get("error")):
+            try:
+                jobs.checkpoint()
+            except (jobs.JobCancelled, jobs.JobTimedOut) as exc:
+                result = jobs.stopped_result(result, exc)
         result["executionMetadata"] = captured_metadata
         try:
             if batch:
@@ -979,7 +1056,7 @@ def _run_panel_request(data, *, batch):
         except Exception as exc:
             result["historySaved"] = False
             result["historyError"] = "历史保存失败，请查看服务日志"
-            logging.getLogger(__name__).error("案例/批次 %s 历史保存失败：%s", data.get("id") or data.get("suite"), exc)
+            logging.getLogger(__name__).error("案例/批次 %s 历史保存失败：%s", data.get("id") or data.get("suite"), redact_secrets(str(exc)))
         return result
 
     if data.get('background') is True:
@@ -993,6 +1070,11 @@ def _run_panel_request(data, *, batch):
                                operation=execute, metadata=metadata, timeout_seconds=data.get("timeoutSeconds",1200))
 
 
+class RedactingFormatter(logging.Formatter):
+    def format(self, record):
+        return redact_secrets(super().format(record))
+
+
 def main():
     parser = argparse.ArgumentParser(description="TestDock 当前项目面板")
     parser.add_argument('--pack', default=cat.PACKS[0]['id'])
@@ -1000,7 +1082,9 @@ def main():
     args = parser.parse_args()
     if args.pack != cat.PACKS[0]['id'] or args.port != PORT:
         parser.error("启动标签与所选项目 / PLATFORM_PANEL_PORT 不一致")
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    logging.basicConfig(level=logging.INFO)
+    for handler in logging.getLogger().handlers:
+        handler.setFormatter(RedactingFormatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     store = jobs.get_store()
     recovered, pruned = store.recover(), store.prune()
     logging.getLogger(__name__).info("任务存储就绪：中断 %d，清理 %d", recovered, pruned)
@@ -1011,12 +1095,19 @@ def main():
             startup()
     httpd = PanelHTTPServer(("127.0.0.1", PORT), H)
     httpd.daemon_threads = True
+    previous_handlers = {number: signal.getsignal(number) for number in (signal.SIGTERM, signal.SIGINT)}
+    for number in previous_handlers:
+        signal.signal(number, lambda _number, _frame: httpd.request_shutdown())
     print("测试面板已启动: http://localhost:%d" % PORT)
     print("用例目录: 监听 *_cases.py 变更并自动热重载 (revision 轮询 /api/catalog/revision)")
     try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        httpd.shutdown()
+        httpd.serve_forever(poll_interval=.1)
+    finally:
+        httpd.request_shutdown()
+        httpd.wait_for_shutdown()
+        httpd.server_close()
+        for number, handler in previous_handlers.items():
+            signal.signal(number, handler)
 
 
 if __name__ == "__main__":

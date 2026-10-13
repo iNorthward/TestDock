@@ -4,9 +4,50 @@
   const TERMINAL = new Set(['done', 'failed', 'incomplete', 'skipped', 'cancelled', 'timed_out', 'interrupted']);
   const STORAGE_KEY = 'platform.executionRequests.v1';
   const requestId = () => root.crypto?.randomUUID?.() || Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+  const validIdentifier = value => typeof value === 'string' && value.length > 0 && value.length <= 128 && value.trim() === value;
 
-  function createFetch(original, {storage, now = Date.now, identify = requestId} = {}) {
+  async function fingerprint(url, body) {
+    const raw = url+'\n'+JSON.stringify(body);
+    if (root.crypto?.subtle) {
+      try {
+        const hash = await root.crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+        return {key: Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2,'0')).join(''), persisted: true};
+      } catch (_) { /* Memory-only fallback; never persist the raw payload. */ }
+    }
+    return {key: raw, persisted: false};
+  }
+
+  function createFetch(original, {storage, identify = requestId} = {}) {
     const memory = new Map();
+    const readRecords = () => {
+      let records = {};
+      try { records = JSON.parse(storage?.getItem(STORAGE_KEY) || '{}'); } catch (_) {}
+      if (!records || typeof records !== 'object' || Array.isArray(records)) records = {};
+      for (const key of Object.keys(records)) {
+        const entry = records[key];
+        if (!/^[a-f0-9]{64}$/.test(key) || !entry || !validIdentifier(entry.id) ||
+            (entry.executionId !== undefined && !validIdentifier(entry.executionId))) {
+          delete records[key];
+        } else {
+          // Older records included expires. Unknown outcomes do not become safe to replay with age.
+          records[key] = {id: entry.id, ...(entry.executionId === undefined ? {} : {executionId: entry.executionId})};
+        }
+      }
+      return records;
+    };
+    const writeRecords = records => {
+      try { storage?.setItem(STORAGE_KEY, JSON.stringify(records)); } catch (_) {}
+    };
+    const updateEntry = (key, entry, persisted, remove = false) => {
+      if (memory.get(key)?.id === entry.id) {
+        if (remove) memory.delete(key); else memory.set(key, entry);
+      }
+      if (!persisted) return;
+      const records = readRecords();
+      if (records[key]?.id !== entry.id) return;
+      if (remove) delete records[key]; else records[key] = entry;
+      writeRecords(records);
+    };
     const executionFetch = async function(url, init = {}) {
       if (typeof url !== 'string' || !url.startsWith('/api/') || String(init.method).toUpperCase() !== 'POST') {
         return original(url, init);
@@ -16,50 +57,44 @@
       if (!body || typeof body !== 'object' || Array.isArray(body) || body.requestId || url === '/api/execution/cancel') {
         return original(url, init);
       }
-      const raw = url+'\n'+JSON.stringify(body);
-      let key = raw, persisted = false;
-      if (root.crypto?.subtle) {
-        try {
-          const hash = await root.crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
-          key = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2,'0')).join('');
-          persisted = true;
-        } catch (_) { /* Memory-only fallback; never persist the raw payload. */ }
-      }
-      const readRecords = () => {
-        let records = {};
-        try { records = persisted ? JSON.parse(storage?.getItem(STORAGE_KEY) || '{}') : {}; } catch (_) {}
-        if (!records || typeof records !== 'object' || Array.isArray(records)) records = {};
-        for (const name of Object.keys(records)) if (!records[name] || records[name].expires <= now()) delete records[name];
-        return records;
-      };
-      const records = readRecords();
+      const {key, persisted} = await fingerprint(url, body);
+      const records = persisted ? readRecords() : {};
       const saved = records[key] || memory.get(key);
-      const entry = saved && saved.expires > now() ? saved : {id: identify(), expires: now()+86400000};
+      const entry = saved || {id: identify()};
       memory.set(key, entry);
-      const save = (remove = false) => {
-        if (!persisted) return;
-        const current = readRecords();
-        if (remove) delete current[key]; else current[key] = entry;
-        try { storage?.setItem(STORAGE_KEY, JSON.stringify(current)); } catch (_) {}
-      };
-      save();
+      if (persisted) { records[key] = entry; writeRecords(records); }
       const response = await original(url, {...init, headers: {...init.headers, 'Content-Type':'application/json'},
                                            body: JSON.stringify({...body, requestId: entry.id})});
       try {
         const payload = await response.clone().json();
-        if (response.status < 500 && !payload.data?.pending) {
-          memory.delete(key);
-          save(true);
+        if (response.status < 500) {
+          const data = payload.data;
+          if (validIdentifier(data?.executionId) && (data.pending === true || body.background === true)) {
+            // A terminal query acknowledges this exact submission, including after a reload.
+            updateEntry(key, {...entry, executionId: data.executionId}, persisted);
+          } else if (!data?.pending && typeof payload.ok === 'boolean') {
+            updateEntry(key, entry, persisted, true);
+          }
         }
       } catch (_) { /* Keep the request ID when the outcome is unknown. */ }
       return response;
     };
+    executionFetch.completeExecution = function(executionId) {
+      if (!validIdentifier(executionId)) return;
+      for (const [key, entry] of memory) {
+        if (entry.executionId === executionId) memory.delete(key);
+      }
+      const records = readRecords();
+      for (const key of Object.keys(records)) {
+        if (records[key].executionId === executionId) delete records[key];
+      }
+      writeRecords(records);
+    };
+    // Compatibility for callers that still hold their exact original request body.
     executionFetch.completeRequest = async function(url, body) {
-      const raw = url+'\n'+JSON.stringify(body);
-      let key=raw,persisted=false;
-      if(root.crypto?.subtle){try{const hash=await root.crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));key=Array.from(new Uint8Array(hash),byte=>byte.toString(16).padStart(2,'0')).join('');persisted=true;}catch(_) {}}
+      const {key, persisted} = await fingerprint(url, body);
       memory.delete(key);
-      if(persisted){try{const records=JSON.parse(storage?.getItem(STORAGE_KEY)||'{}');if(records&&typeof records==='object'&&!Array.isArray(records)){delete records[key];storage?.setItem(STORAGE_KEY,JSON.stringify(records));}}catch(_) {}}
+      if (persisted) { const records = readRecords(); delete records[key]; writeRecords(records); }
     };
     return executionFetch;
   }

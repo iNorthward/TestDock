@@ -28,7 +28,9 @@
         "test_execution_queue",
         "test_isolated_runner",
         "test_audit_fixes",
-        "test_recheck_fixes"
+        "test_recheck_fixes",
+        "test_execution_safety_fixes",
+        "test_execution_shutdown"
       ],
       "javascript": []
     },
@@ -58,7 +60,8 @@
         "test_db_config",
         "test_platform_portability",
         "test_resource_pool_capabilities",
-        "test_platform_protocol"
+        "test_platform_protocol",
+        "test_execution_shutdown"
       ],
       "javascript": []
     },

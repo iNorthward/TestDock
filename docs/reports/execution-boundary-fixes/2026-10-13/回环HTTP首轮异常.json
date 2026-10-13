@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "testsRun": 9,
+  "failures": 1,
+  "errors": 0,
+  "skipped": 0,
+  "scope": "owned loopback HTTP with synthetic runners and temporary data only",
+  "realBusinessCasesExecuted": 0
+}

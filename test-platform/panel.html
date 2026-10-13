@@ -147,9 +147,9 @@ async function watchActiveJob(){
  const current=activeRun;
  try{
   const job=await PLATFORMExecution.pollJob(fetch,'/api/execution/job?id='+encodeURIComponent(current.jobId),{onProgress:j=>setText('result-status',j.status)});
-  const data=job.result||{ok:null,status:job.status,error:job.error};
-  setText('result-status',data.status==='passed'?'通过':data.executionStatus||data.status||job.status);setText('result',JSON.stringify(data,null,2));renderResult(data);showStatus('执行已结束 · '+current.caseId);
-  await fetch.completeRequest?.(current.batch?'/api/run':'/api/run-case',current.batch?{suite:current.caseId,mode:current.mode||'safe',background:true}:{id:current.caseId,background:true});
+  const data=job.resultExpired===true?{ok:null,status:'incomplete',resultExpired:true,error:job.error||'执行结果已过期，请核验业务状态后再决定是否重新执行。'}:job.result||{ok:null,status:job.status,error:job.error};
+  setText('result-status',data.status==='passed'?'通过':data.executionStatus||data.status||job.status);setText('result',JSON.stringify(data,null,2));renderResult(data);showStatus(job.resultExpired===true?'执行结果已过期 · 请先核验业务状态':'执行已结束 · '+current.caseId,job.resultExpired===true);
+  await fetch.completeExecution?.(current.jobId);
   activeRun=null;saveActiveJob();$('job-cancel').hidden=true;
  }catch(error){setText('result-status','查询未完成');setText('result',error.message+' · 任务 '+current.jobId);showStatus(error.message,true);$('job-resume').hidden=false;}
  finally{watching=false;renderCases();}
@@ -161,6 +161,21 @@ async function runCase(item,button){
   activeRun={jobId:data.executionId,caseId:item.id};saveActiveJob();watching=false;await watchActiveJob();
  }catch(error){watching=false;setText('result-status','提交结果未确认');setText('result',error.message);showStatus(error.message,true);renderCases();}
 }
+function prepareBatchRequest(mode,suite){
+ const selected=allCases.filter(item=>item.suite===suite&&(mode!=='safe'||item.mode==='safe'));
+ const requiresLive=mode==='live'||selected.some(item=>TestDockSecurity.requiresLiveConfirmation(item));
+ if(requiresLive&&!confirm(mode==='safe'?'本组 SAFE 用例中包含会写入当前项目测试环境的操作。确认执行 '+suite+'？':'本组 LIVE 会修改当前项目测试环境。确认执行 '+suite+'？'))return null;
+ return {suite,mode,background:true,...(requiresLive?{confirmLive:suite}:{})};
+}
+async function runBatch(mode){
+ if(activeRun||watching)return;if(!selectedSuite){showStatus('请先选择用例分组',true);return;}
+ const body=prepareBatchRequest(mode,selectedSuite);if(!body)return;
+ watching=true;renderCases();setText('result-status','提交中');setText('result','正在提交 '+body.suite+'…');
+ try{
+  const data=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  activeRun={jobId:data.executionId,caseId:body.suite,batch:true,mode:body.mode};saveActiveJob();watching=false;await watchActiveJob();
+ }catch(error){watching=false;setText('result-status','提交结果未确认');setText('result',error.message);showStatus(error.message,true);renderCases();}
+}
 $('only-failed').onclick=()=>{onlyFailed=!onlyFailed;$('only-failed').classList.toggle('on',onlyFailed);renderCases();};
 $('job-resume').addEventListener('click',watchActiveJob);
 $('job-cancel').addEventListener('click',async()=>{
@@ -168,6 +183,6 @@ $('job-cancel').addEventListener('click',async()=>{
  try{const job=await api('/api/execution/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:activeRun.jobId})});setText('result-status',job.status);if(!watching)await watchActiveJob();}
  catch(error){showStatus(error.message,true);}finally{$('job-cancel').disabled=false;}
 });
-window.addEventListener('hashchange',readRoute);$('nav-cases').addEventListener('click',()=>{location.hash='/cases/';});$('nav-resources').addEventListener('click',()=>{location.hash='/resources';});$('filter').addEventListener('input',renderCases);$('reload').addEventListener('click',()=>{loadCatalog();loadCapabilities();if(currentView==='resources')loadResources();});$('identity-reload').addEventListener('click',loadResources);$('batch-safe').onclick=async()=>{if(activeRun||watching)return;if(!selectedSuite){showStatus('请先选择用例分组',true);return;}try{const data=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({suite:selectedSuite,mode:'safe',background:true})});activeRun={jobId:data.executionId,caseId:selectedSuite,batch:true};saveActiveJob();await watchActiveJob();}catch(error){showStatus(error.message,true);}};$('batch-safe-bar').onclick=()=>$('batch-safe').click();$('batch-live').onclick=async()=>{if(activeRun||watching||!selectedSuite)return;if(!confirm('本组 LIVE 会修改当前项目测试环境。确认执行？'))return;try{const data=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({suite:selectedSuite,mode:'live',background:true,confirmLive:selectedSuite})});activeRun={jobId:data.executionId,caseId:selectedSuite,batch:true,mode:'live'};saveActiveJob();await watchActiveJob();}catch(error){showStatus(error.message,true);}};$('rerun-failed').onclick=async()=>{const failed=allCases.filter(c=>(!selectedSuite||c.suite===selectedSuite)&&caseResults.get(c.id)?.ok===false);for(const item of failed){await runCase(item,$('rerun-failed'));if(activeRun)break;}};loadCapabilities();loadCatalog();setInterval(pollCatalogRevision,1500);pollCatalogRevision();
+window.addEventListener('hashchange',readRoute);$('nav-cases').addEventListener('click',()=>{location.hash='/cases/';});$('nav-resources').addEventListener('click',()=>{location.hash='/resources';});$('filter').addEventListener('input',renderCases);$('reload').addEventListener('click',()=>{loadCatalog();loadCapabilities();if(currentView==='resources')loadResources();});$('identity-reload').addEventListener('click',loadResources);$('batch-safe').onclick=()=>runBatch('safe');$('batch-safe-bar').onclick=()=>$('batch-safe').click();$('batch-live').onclick=()=>runBatch('live');$('rerun-failed').onclick=async()=>{const failed=allCases.filter(c=>(!selectedSuite||c.suite===selectedSuite)&&caseResults.get(c.id)?.ok===false);for(const item of failed){await runCase(item,$('rerun-failed'));if(activeRun)break;}};loadCapabilities();loadCatalog();setInterval(pollCatalogRevision,1500);pollCatalogRevision();
 </script>
 </body></html>

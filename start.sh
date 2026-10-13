@@ -94,20 +94,10 @@ start_one() {
   existing="$(port_pids "$port")"
   if [[ -n "$existing" ]]; then
     echo "[$name] 端口 $port 已被占用 (pid ${existing//$'\n'/ })，正在停止本仓库服务…"
-    stop_one "$name" "$port" "$script" "$pidfile" quiet
+    stop_one "$name" "$port" "$script" "$pidfile" quiet || return 1
     if ! wait_down "$port"; then
-      for pid in $(port_pids "$port"); do
-        if is_our_process "$pid" "$script"; then
-          kill -9 "$pid" 2>/dev/null || true
-        else
-          echo "[$name] 端口 $port 仍被其他进程占用 (pid $pid): $(process_command "$pid")" >&2
-          return 1
-        fi
-      done
-      wait_down "$port" || {
-        echo "[$name] 无法释放端口 $port" >&2
-        return 1
-      }
+      echo "[$name] 端口 $port 尚未释放；未启动第二个实例，请等待原服务清理" >&2
+      return 1
     fi
   fi
 
@@ -156,7 +146,6 @@ stop_one() {
     if [[ -n "$saved" ]] && is_our_process "$saved" "$script"; then
       if kill "$saved" 2>/dev/null; then killed=1; fi
     fi
-    rm -f "$pidfile"
   fi
 
   for pid in $pids; do
@@ -166,15 +155,11 @@ stop_one() {
   done
 
   if [[ "$killed" -eq 1 ]] && ! wait_down "$port"; then
-    for pid in $(port_pids "$port"); do
-      if is_our_process "$pid" "$script"; then
-        kill -9 "$pid" 2>/dev/null || true
-      else
-        echo "[$name] 端口 $port 进程身份发生变化 (pid $pid): $(process_command "$pid")" >&2
-        return 1
-      fi
-    done
+    echo "[$name] 服务仍在等待任务/业务清理；未强制终止，请核验任务状态后重试" >&2
+    return 1
   fi
+
+  if [[ "$killed" -eq 1 ]]; then rm -f "$pidfile"; fi
 
   if [[ "$killed" -eq 1 ]]; then
     if [[ -z "$quiet" ]]; then

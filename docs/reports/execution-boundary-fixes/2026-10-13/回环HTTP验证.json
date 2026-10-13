@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "testsRun": 10,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "scope": "owned loopback HTTP and SIGTERM cleanup with synthetic runners and temporary data only",
+  "realBusinessCasesExecuted": 0
+}

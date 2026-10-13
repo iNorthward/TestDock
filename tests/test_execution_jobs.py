@@ -121,6 +121,133 @@ class ExecutionJobsTests(unittest.TestCase):
         self.assertIsNotNone(self.store.get(active["id"]))
         self.assertIsNotNone(self.store.get(fresh["id"]))
 
+    def test_independent_error_is_redacted_before_storage_and_on_query(self):
+        job = self.create()
+        message = "Bearer synthetic-token token=synthetic-secret"
+        self.store.finish(job["id"], result={"ok": False, "error": message}, error=message)
+        restored = self.store.get(job["id"])
+        self.assertEqual(restored["error"], "Bearer [redacted] token=[redacted]")
+        self.assertEqual(restored["result"]["error"], restored["error"])
+        with self.store.connection() as conn:
+            raw = str(dict(conn.execute("SELECT * FROM execution_jobs").fetchone()))
+            self.assertNotIn("synthetic-token", raw)
+            self.assertNotIn("synthetic-secret", raw)
+            # Defense in depth protects reads even if an older writer adds a row.
+            conn.execute("UPDATE execution_jobs SET error=? WHERE id=?", (message, job["id"]))
+        self.assertNotIn("synthetic-secret", self.store.get(job["id"])["error"])
+
+    def test_legacy_store_migrates_error_without_losing_result_or_request(self):
+        with sqlite3.connect(self.store.path) as conn:
+            conn.execute("""CREATE TABLE execution_jobs (
+                id TEXT PRIMARY KEY, kind TEXT NOT NULL, request_key TEXT UNIQUE,
+                fingerprint TEXT, status TEXT NOT NULL, created_at REAL NOT NULL,
+                updated_at REAL NOT NULL, deadline_at REAL NOT NULL,
+                owner_pid INTEGER, owner_tag TEXT, metadata_json TEXT NOT NULL,
+                progress_json TEXT NOT NULL, result_json TEXT, error TEXT
+            )""")
+            conn.execute("""INSERT INTO execution_jobs VALUES
+                (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                ("legacy", "test", "legacy-request", jobs.request_fingerprint({}), "failed",
+                 1, time.time(), 2, None, None, "{}", "{}", '{"ok":false}', "token=legacy-secret"))
+        restored = self.store.get("legacy")
+        self.assertEqual(restored["error"], "token=[redacted]")
+        self.assertEqual(restored["result"], {"ok": False})
+        runner = Mock()
+        retry = jobs.run_idempotent(kind="test", request_id="legacy-request", payload={}, operation=runner)
+        runner.assert_not_called()
+        self.assertEqual(retry["executionId"], "legacy")
+        with sqlite3.connect(self.store.path) as conn:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT error FROM execution_jobs").fetchone()[0], "token=[redacted]")
+
+    def test_pruned_request_keeps_original_id_and_never_replays_or_reports_success(self):
+        runner = Mock(return_value={"ok": True, "uid": "synthetic-private-uid"})
+        payload = {"amount": "1.00", "token": "synthetic-private-token"}
+        args = dict(kind="test", request_id="synthetic-private-request", payload=payload, operation=runner)
+        original = jobs.run_idempotent(**args)
+        with self.store.connection() as conn:
+            conn.execute("UPDATE execution_jobs SET updated_at=? WHERE id=?",
+                         (time.time()-8*86400, original["executionId"]))
+        self.assertEqual(self.store.prune(), 1)
+        # Reopen the SQLite store to ensure deduplication survives process restart.
+        self.store = jobs.JobStore(self.store.path)
+        with patch.object(jobs, "get_store", return_value=self.store), ThreadPoolExecutor(4) as executor:
+            retries = list(executor.map(lambda _: jobs.run_idempotent(**args), range(4)))
+        runner.assert_called_once()
+        for retry in retries:
+            self.assertEqual(retry["executionId"], original["executionId"])
+            self.assertTrue(retry["deduplicated"])
+            self.assertTrue(retry["resultExpired"])
+            self.assertEqual(retry["originalExecutionStatus"], "done")
+            self.assertEqual(retry["status"], "incomplete")
+            self.assertIsNone(retry["ok"])
+            self.assertIn("核验业务状态", retry["error"])
+        with self.store.connection() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM execution_jobs").fetchone()[0], 0)
+            tombstones = [dict(row) for row in conn.execute("SELECT * FROM execution_job_tombstones")]
+        self.assertEqual(len(tombstones), 1)
+        for private in (args["request_id"], payload["token"], "synthetic-private-uid", payload["amount"]):
+            self.assertNotIn(private, str(tombstones))
+        with self.assertRaises(jobs.RequestConflict):
+            self.store.create(kind="test", request_key=args["request_id"], fingerprint=jobs.request_fingerprint({"amount": 1}))
+        with self.assertRaises(jobs.RequestConflict):
+            self.store.create(kind="another", request_key=args["request_id"], fingerprint=jobs.request_fingerprint(payload))
+
+    def test_background_retry_queries_expired_job_without_enqueuing(self):
+        payload = {"amount": "1.00"}
+        job, _ = self.store.create(kind="test", request_key="background-expired",
+            fingerprint=jobs.request_fingerprint({"payload": payload, "timeoutSeconds": 1200}))
+        self.store.finish(job["id"], result={"ok": True})
+        with self.store.connection() as conn:
+            conn.execute("UPDATE execution_jobs SET updated_at=? WHERE id=?", (time.time()-8*86400, job["id"]))
+        self.store.prune()
+        runner = Mock()
+        with patch.object(jobs, "get_executor") as executor:
+            identifier = jobs.start_background_job(kind="test", request_id="background-expired", payload=payload, operation=runner)
+        executor.assert_not_called()
+        runner.assert_not_called()
+        self.assertEqual(identifier, job["id"])
+        restored = self.store.get(identifier)
+        self.assertIn(restored["status"], jobs.TERMINAL)
+        self.assertTrue(restored["result"]["resultExpired"])
+        self.assertEqual(self.store.cancel(identifier), restored)
+
+    def test_overflow_prune_preserves_tombstones_but_keeps_fresh_bodies(self):
+        identifiers = []
+        for index in range(3):
+            job, _ = self.store.create(kind="test", request_key=f"overflow-{index}", fingerprint=jobs.request_fingerprint({}))
+            self.store.finish(job["id"], result={"ok": True})
+            identifiers.append(job["id"])
+        with self.store.connection() as conn:
+            conn.execute("UPDATE execution_jobs SET updated_at=? WHERE id IN (?,?)",
+                         (time.time()-2*86400, *identifiers[:2]))
+        self.assertEqual(self.store.prune(maximum_completed=1), 2)
+        for identifier in identifiers[:2]:
+            self.assertTrue(self.store.get(identifier)["resultExpired"])
+        self.assertNotIn("resultExpired", self.store.get(identifiers[-1]))
+
+    def test_prune_tombstone_and_body_delete_are_atomic(self):
+        job, _ = self.store.create(kind="test", request_key="atomic", fingerprint=jobs.request_fingerprint({}))
+        self.store.finish(job["id"], result={"ok": True})
+        with self.store.connection() as conn:
+            conn.execute("UPDATE execution_jobs SET updated_at=? WHERE id=?", (time.time()-8*86400, job["id"]))
+            conn.execute("""CREATE TRIGGER synthetic_delete_failure BEFORE DELETE ON execution_jobs
+                BEGIN SELECT RAISE(ABORT, 'synthetic prune failure'); END""")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.store.prune()
+        self.assertEqual(self.store.get(job["id"])["result"], {"ok": True})
+        with self.store.connection() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM execution_job_tombstones").fetchone()[0], 0)
+
+    def test_failure_evidence_has_priority_over_cancelled_or_timed_out(self):
+        for stop in ("cancelled", "timed_out"):
+            for evidence in ({"ok": False}, {"status": "failed"}, {"ok": None, "error": "cleanup failed"},
+                             {"ok": None, "status": "incomplete", "error": "cleanup failed"}):
+                with self.subTest(stop=stop, evidence=evidence):
+                    job = self.create()
+                    self.store.finish(job["id"], result={**evidence, "executionStatus": stop})
+                    self.assertEqual(self.store.get(job["id"])["status"], "failed")
+
     def test_raw_input_validation_happens_before_storage(self):
         for kwargs in ({"timeout_seconds":True},{"timeout_seconds":float("nan")},{"request_key":" x "},
                        {"request_key":"r"},{"metadata":[]},{"progress":[]}):

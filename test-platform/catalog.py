@@ -123,6 +123,8 @@ if COMMON_ROOT.is_dir() and str(COMMON_ROOT) not in sys.path:
 
 from case_result_status import normalize_case_result, summarize_cases  # noqa: E402
 from security_helpers import guard_unscoped_write, guard_write_case  # noqa: E402
+from execution_provenance import (capture_code_snapshot, initialize_runtime_snapshot,
+                                  refresh_case_runtime_snapshot)  # noqa: E402
 
 
 def discover_case_module_names():
@@ -227,8 +229,11 @@ def _load_case_modules(reload_modules=False):
 
 
 # 首次 import
+_INITIAL_CODE_SNAPSHOT = capture_code_snapshot()
 _assign_modules(_load_case_modules(reload_modules=False))
 CATALOG_EXTENSIONS = load_catalog_extensions(PACKS)
+initialize_runtime_snapshot(_INITIAL_CODE_SNAPSHOT)
+del _INITIAL_CODE_SNAPSHOT
 _RELOAD_FAILED = False
 
 
@@ -257,9 +262,11 @@ def reload_registry():
     """热重载所有 *_cases.py 并重建目录（改文件后无需重启 server）。"""
     global _RELOAD_FAILED
     try:
+        snapshot = capture_code_snapshot()
         modules = _load_case_modules(reload_modules=True)
         _assign_modules(modules)
         _call_catalog_extensions("after_reload")
+        refresh_case_runtime_snapshot(snapshot, case_source_files(PACKS))
     except Exception:
         # importlib.reload mutates module objects even if index validation fails.
         # Block execution until a successful reload instead of using stale indexes.
@@ -404,6 +411,16 @@ def exec_case(case_id, execution_options=None):
 
 
 @registry_read
+def selected_cases(mode="safe", suite=None):
+    """Use one selection rule for execution and its preflight write checks."""
+    if mode not in ("safe", "live"):
+        raise ValueError("mode 必须是 safe 或 live")
+    return [case for case in _ALL
+            if (not suite or case.get("suite") == suite)
+            and (mode != "safe" or case["mode"] == "safe")]
+
+
+@registry_read
 def run_all(mode="safe", suite=None, execution_options=None):
     if mode not in ("safe", "live"):
         raise ValueError("mode 必须是 safe 或 live")
@@ -418,11 +435,7 @@ def run_all(mode="safe", suite=None, execution_options=None):
             raise
         # Let individual cases report the missing pool prerequisite instead
         # of aborting the whole suite before a per-case result can be recorded.
-    selected = [
-        c for c in _ALL
-        if (not suite or c.get("suite") == suite)
-        and (mode != "safe" or c["mode"] == "safe")
-    ]
+    selected = selected_cases(mode, suite)
     blocked = {}
     for case in selected:
         if case.get("regressionExcluded"):
@@ -449,17 +462,38 @@ def run_all(mode="safe", suite=None, execution_options=None):
             if not isinstance(exc, IdentityUnavailable):
                 raise
     out = []
-    for c in selected:
-        if c["id"] in blocked:
-            out.append(normalize_case_result({
-                "id": c["id"], "ok": True, "subs": [blocked[c["id"]]],
-            }))
-            continue
-        out.append(exec_case(c["id"], execution_options=execution_options or {}))
+    stopped = None
+    try:
+        for c in selected:
+            checkpoint()
+            if c["id"] in blocked:
+                out.append(normalize_case_result({
+                    "id": c["id"], "ok": True, "subs": [blocked[c["id"]]],
+                }))
+                continue
+            out.append(exec_case(c["id"], execution_options=execution_options or {}))
+        # Retain every completed result when cancellation arrives at the end.
+        checkpoint()
+    except (JobCancelled, JobTimedOut) as exc:
+        stopped = "cancelled" if isinstance(exc, JobCancelled) else "timed_out"
+        completed = {row["id"] for row in out}
+        for case in selected:
+            if case["id"] not in completed:
+                out.append(normalize_case_result({
+                    "id": case["id"], "ok": None, "status": "incomplete",
+                    "subs": [{"label": "执行停止", "ok": None, "status": "incomplete",
+                              "detail": str(exc) + "；未取得完成结果，不推断业务操作已回滚"}],
+                }))
     summary = summarize_cases(out)
-    return {
+    result = {
         "mode": mode,
         "suite": suite,
         "cases": out,
         **summary,
     }
+    if stopped:
+        result["executionStatus"] = stopped
+        result["ok"] = False if summary["failed"] else None
+        if not summary["failed"]:
+            result["status"] = "incomplete"
+    return result
