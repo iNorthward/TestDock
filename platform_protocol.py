@@ -1,7 +1,8 @@
 """Versioned platform/Pack extension contract, independent of business models."""
 import re
-API_VERSION = '1.0'
-FEATURES = frozenset({'request_id', 'resource_pool', 'diagnostics', 'response_decoder', 'bounded_queue', 'history_compare', 'isolated_readonly'})
+API_VERSION = '1.1'
+FEATURES = frozenset({'request_id', 'resource_pool', 'diagnostics', 'response_decoder', 'bounded_queue', 'history_compare', 'isolated_readonly',
+                      'prepared_requests', 'capability_adoption', 'workbench_components'})
 
 def version(value):
     if not isinstance(value,str) or not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)',value):

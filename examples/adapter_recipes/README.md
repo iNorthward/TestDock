@@ -6,6 +6,7 @@ Copy the selected recipe into your own Pack helpers and import it by the full Pa
 - `contracts.ConfiguredEnvelope`: declare success, code, message and payload JSON paths from project evidence. Equality preserves the raw JSON type; boolean and integer success values do not mix. Code normalization does not convert strings to numbers.
 - `contracts.PageContract`: declare records/total paths; check array, nonnegative raw integer, and returned count. This checks shape only; the Pack owns ID, filtering, sorting, required fields and reconciliation.
 - Lossless numeric decoding: the registered `api_client.ResponseDecoder` can use `json_wire_types.lossless_json_loads`. Validate raw wire type before Decimal reconciliation; request encoding is a separate project decision.
+- [signing.py](signing.py): an explicitly synthetic signing example using the API 1.1 prepared-request protocol. Copy it into the selected Pack and choose the algorithm, canonical query and exact encoder from confirmed business evidence; the sample key and protocol are never real authentication. See [the preparation contract](../../docs/guides/请求准备与签名.md).
 
 Keep passwords and tokens outside source and test fixtures. Bootstrap registers adapters only. Scope, auth flow, endpoint paths and cleanup are owned by your Pack. Run synthetic tests first, then a small authorized real read-only case set.
 

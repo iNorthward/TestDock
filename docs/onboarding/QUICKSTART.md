@@ -47,3 +47,5 @@ python3 scripts/accept_project_integration.py --report /tmp/integration.json
 ## 接入后的运行与升级
 
 一键体检、证据任务清单、Adapter 配方、兼容门禁、执行队列及历史对比见 [Agent 操作手册](AGENT_OPERATIONS.md)。
+
+API 1.1 提供[请求准备与签名](../guides/请求准备与签名.md)、[能力采用清单](../guides/能力采用清单.md)和[工作台交互组件](../guides/工作台交互组件.md)。新生成 Pack 显式声明采用方式，验证状态初始为未执行；旧 Pack 可逐步补充。运行 `python3 scripts/accept_foundation_extensions.py --report /tmp/foundation-extensions.json` 可验收独立发行中的合成签名与双 Pack 页面，不调用真实业务。

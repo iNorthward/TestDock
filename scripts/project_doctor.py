@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'scripts')]
 from platform_protocol import compatibility
+from platform_capabilities import adoption_report
 from timezone_config import parse_env_value
 from verify_project_pack import SmokeCaseUnavailable, verify
 
@@ -25,7 +26,8 @@ def diagnose(pack_id,*,root=ROOT,env_file=None,mock_case=None,probe_port=False):
     def add(name,status,detail,action=''):
         checks.append({'name':name,'status':status,'detail':detail,'nextAction':action})
     folder=root/'packs'/pack_id;manifest_path=folder/'pack.json'
-    if not manifest_path.is_file() or not manifest_path.resolve().is_relative_to(root/'packs'):
+    if (not manifest_path.is_file() or folder.resolve()!=folder
+            or not manifest_path.resolve().is_relative_to(folder)):
         add('manifest','failed','Missing or escaping selected Pack','Generate an owned Pack with create_project_pack.py')
         return {'pack':pack_id,'ok':False,'status':'failed','checks':checks,'realBusinessVerified':False}
     manifest=json.loads(manifest_path.read_text())
@@ -34,6 +36,17 @@ def diagnose(pack_id,*,root=ROOT,env_file=None,mock_case=None,probe_port=False):
         add('platform-api','passed' if protocol['explicit'] else 'warning','Compatible API '+protocol['version'],
             '' if protocol['explicit'] else 'Declare platform_api min/max_exclusive/features in pack.json')
     except ValueError as exc:add('platform-api','failed',str(exc),'Update the Pack or use a compatible platform release')
+    capabilities=None
+    try:
+        capabilities=adoption_report(manifest,root=root,pack_id=pack_id)
+        capability_status=capabilities['status']
+        add('capability-adoption','passed' if capability_status=='ready' else capability_status,
+            'Capability choices and scoped evidence projected; declarations are not runtime verification',
+            'Declare missing choices and explicitly record scoped evidence; never probe business services automatically'
+            if capabilities['needsMigration'] or capability_status!='ready' else '')
+    except (OSError,ValueError,TypeError):
+        add('capability-adoption','failed','Invalid capability declaration or owned evidence state',
+            'Fix selected Pack capability_adoption or evidence receipts; see docs/guides/能力采用清单.md')
     default_env=root/('.env.'+pack_id)
     if not default_env.exists() and manifest.get('default') is True:default_env=root/'.env.local'
     env_path=Path(env_file) if env_file else default_env
@@ -86,7 +99,8 @@ def diagnose(pack_id,*,root=ROOT,env_file=None,mock_case=None,probe_port=False):
         add('catalog-adapter','failed',detail[:1200],'Fix owned manifest/bootstrap/case errors, then rerun the doctor')
     statuses={item['status'] for item in checks}
     status='failed' if 'failed' in statuses else 'incomplete' if 'incomplete' in statuses else 'ready'
-    return {'pack':pack_id,'ok':status=='ready','status':status,'checks':checks,'realBusinessVerified':False,
+    return {'pack':pack_id,'ok':True if status=='ready' else False if status=='failed' else None,'status':status,'checks':checks,'realBusinessVerified':False,
+            'capabilityAdoption':capabilities,
             'nextCommand':'PLATFORM_ENV_FILE='+shlex.quote(str(env_path))+' ./start.sh start' if env_path.is_file() else None}
 
 def main():

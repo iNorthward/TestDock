@@ -11,9 +11,16 @@ class AgentOnboardingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
             for folder in ('test-platform','examples','resources','scripts'):shutil.copytree(ROOT/folder,root/folder,ignore=shutil.ignore_patterns('__pycache__'))
-            for filename in ('platform_config.py','timezone_config.py','platform_protocol.py'):shutil.copyfile(ROOT/filename,root/filename)
+            for filename in ('platform_config.py','timezone_config.py','platform_protocol.py','platform_capabilities.py'):shutil.copyfile(ROOT/filename,root/filename)
             before=(root/'test-platform/catalog.py').read_bytes()
             create.create('sensor_app','传感器',18802,root=root)
+            from platform_capabilities import adoption_report
+            manifest=json.loads((root/'packs/sensor_app/pack.json').read_text())
+            choices=adoption_report(manifest,root=root)
+            self.assertTrue(choices['declared'])
+            self.assertFalse(choices['needsMigration'])
+            self.assertTrue(all(row['verification']['status']=='not_run' for row in choices['items']))
+            self.assertIn('capability_adoption',manifest['platform_api']['features'])
             result=verify.verify('sensor_app',smoke='SENSOR_APP-R01',root=root)
             self.assertEqual(result['pack'],'sensor_app');self.assertEqual(result['mockPassed'],'SENSOR_APP-R01')
             self.assertEqual((root/'test-platform/catalog.py').read_bytes(),before)
@@ -53,7 +60,7 @@ class AgentOnboardingTests(unittest.TestCase):
             root=Path(temp)
             for folder in ('test-platform','examples','resources','scripts'):
                 shutil.copytree(ROOT/folder,root/folder,ignore=shutil.ignore_patterns('__pycache__'))
-            for name in ('platform_config.py','timezone_config.py','platform_protocol.py'):shutil.copyfile(ROOT/name,root/name)
+            for name in ('platform_config.py','timezone_config.py','platform_protocol.py','platform_capabilities.py'):shutil.copyfile(ROOT/name,root/name)
             recipe=root/'examples/http_pack_template/contract.example.json'
             create.create('http_app','HTTP App',18803,root=root,contract_file=recipe)
             readme=(root/'packs/http_app/README.md').read_text()

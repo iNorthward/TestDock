@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse,hashlib,json,re,sys,time
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
+from platform_capabilities import CAPABILITIES,adoption_report,build_binding,prepare_evidence
 TASKS={
  'scope':'Record authorized read-only case IDs and project evidence',
  'environment':'Run project_doctor.py with the selected environment',
@@ -17,10 +19,11 @@ def state_path(pack_id,root=ROOT):
     root=Path(root).resolve()
     if not re.fullmatch('[a-z][a-z0-9_]*',pack_id):raise ValueError('invalid pack id')
     manifest=root/'packs'/pack_id/'pack.json'
-    if not manifest.is_file() or not manifest.resolve().is_relative_to(root/'packs'):raise ValueError('owned Pack manifest required')
+    owner=root/'packs'/pack_id
+    if not manifest.is_file() or owner.resolve()!=owner or not manifest.resolve().is_relative_to(owner):raise ValueError('owned Pack manifest required')
     destination=root/'data'/pack_id/'onboarding-tasks.json'
     if not destination.resolve().is_relative_to(root/'data'/pack_id):raise ValueError('task state escapes project data')
-    if not (root/'data'/pack_id).resolve().is_relative_to(root):raise ValueError('project task directory escapes platform')
+    if (root/'data'/pack_id).resolve()!=root/'data'/pack_id:raise ValueError('project task directory escapes platform')
     return destination
 
 def load(pack_id,*,root=ROOT,require_real=False):
@@ -47,7 +50,8 @@ def save(data,root):
     path=state_path(data['pack'],root);path.parent.mkdir(parents=True,exist_ok=True)
     temporary=path.with_suffix('.tmp')
     if temporary.exists():raise ValueError('pending task write exists; inspect before retry')
-    with temporary.open('x') as stream:stream.write(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+    saved={key:value for key,value in data.items() if key!='capabilityAdoption'}
+    with temporary.open('x') as stream:stream.write(json.dumps(saved,ensure_ascii=False,indent=2)+'\n')
     temporary.chmod(0o600);temporary.replace(path)
 
 def init(pack_id,*,root=ROOT,require_real=False):
@@ -107,6 +111,28 @@ def record(pack_id,task,evidence,*,root=ROOT):
             if task=='real_readonly':row['scopeEvidenceSha256']=scope_digest
     save(data,root);return status(pack_id,root=root)
 
+def _manifest(pack_id,root):
+    # state_path already enforces selected-Pack ownership; do not import bootstrap.
+    state_path(pack_id,root)
+    path=Path(root).resolve()/'packs'/pack_id/'pack.json'
+    return json.loads(path.read_bytes())
+
+def capability_context(pack_id,capability,*,root=ROOT):
+    manifest=_manifest(pack_id,root)
+    return {'pack':pack_id,'capability':capability,
+            'binding':build_binding(manifest,root=root,pack_id=pack_id,capability=capability)}
+
+def record_capability(pack_id,capability,evidence,*,root=ROOT):
+    manifest=_manifest(pack_id,root)
+    receipt=prepare_evidence(manifest,capability,evidence,root=root,pack_id=pack_id,recorded_at=int(time.time()))
+    data=load(pack_id,root=root)
+    receipts=data.setdefault('capabilityEvidence',{})
+    if not isinstance(receipts,dict):raise ValueError('invalid capability evidence receipts')
+    receipts[capability]=receipt
+    # Validate every receipt before persisting; preserve the original six task rows.
+    adoption_report(manifest,root=root,pack_id=pack_id,capability_evidence=receipts)
+    save(data,root);return status(pack_id,root=root)
+
 def status(pack_id,*,root=ROOT):
     data=load(pack_id,root=root)
     reports={}
@@ -125,15 +151,26 @@ def status(pack_id,*,root=ROOT):
             or real.get('scopeEvidenceSha256',scope.get('evidenceSha256'))!=scope.get('evidenceSha256')
             or not set(reports['real_readonly']['caseIds'])<=set(reports['scope']['caseIds'])):
         real.update(status='stale',nextAction='Re-record real acceptance against the current authorized scope')
-    ready=all(row['status']=='passed' for row in data['tasks'] if row['required'])
-    data.update(ok=ready,status='ready' if ready else 'incomplete',realBusinessVerified=any(row['id']=='real_readonly' and row['status']=='passed' for row in data['tasks']))
+    capabilities=adoption_report(_manifest(pack_id,root),root=root,pack_id=pack_id,
+                                 capability_evidence=data.get('capabilityEvidence',{}))
+    ready=all(row['status']=='passed' for row in data['tasks'] if row['required']) and capabilities['status']=='ready'
+    overall='failed' if capabilities['status']=='failed' else 'ready' if ready else 'incomplete'
+    data.update(ok=True if ready else False if overall=='failed' else None,status=overall,
+                realBusinessVerified=any(row['id']=='real_readonly' and row['status']=='passed' for row in data['tasks']),
+                capabilityAdoption=capabilities)
     return data
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--pack',required=True);p.add_argument('action',choices=['init','status','record']);p.add_argument('--require-real',action='store_true');p.add_argument('--task',choices=list(TASKS));p.add_argument('--evidence',type=Path);a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--pack',required=True);p.add_argument('action',choices=['init','status','record','capability-context','record-capability']);p.add_argument('--require-real',action='store_true');p.add_argument('--task',choices=list(TASKS));p.add_argument('--capability',choices=CAPABILITIES);p.add_argument('--evidence',type=Path);a=p.parse_args()
     try:
         if a.action=='init':d=init(a.pack,require_real=a.require_real)
         elif a.action=='status':d=status(a.pack)
+        elif a.action=='capability-context':
+            if not a.capability:raise ValueError('capability-context requires --capability')
+            d=capability_context(a.pack,a.capability)
+        elif a.action=='record-capability':
+            if not a.capability or not a.evidence:raise ValueError('record-capability requires --capability and --evidence')
+            d=record_capability(a.pack,a.capability,a.evidence)
         else:
             if not a.task or not a.evidence:raise ValueError('record requires --task and --evidence')
             d=record(a.pack,a.task,a.evidence)

@@ -61,6 +61,8 @@ Pack 目前只能从平台仓库内的 `packs/<id>` 装载，尚不支持外部�
 
 [Agent 操作与交接协议](docs/onboarding/AGENT_OPERATIONS.md) 包含一键体检、证据任务清单、Adapter 配方、Pack 协议版本、执行队列与只读进程隔离、历史对比及真实验收恢复。
 
+API 1.1 增加[请求准备与签名](docs/guides/请求准备与签名.md)、[能力采用清单](docs/guides/能力采用清单.md)和[工作台交互组件](docs/guides/工作台交互组件.md)。旧 Pack 与旧 transport 保持兼容；新生成 Pack 显式声明采用方式，验证事实初始为未执行。自定义工作台可从两个合成样例开始，继续沿用会话保护、任务与请求去重机制。
+
 ```sh
 python3 scripts/project_doctor.py --pack demo_pack --mock-case DEMO-R01
 python3 scripts/project_tasks.py --pack sample_app init --require-real

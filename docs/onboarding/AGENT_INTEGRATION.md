@@ -115,6 +115,8 @@ TokenProvider 实现 get_token(username, tenant_id)。ProjectHeaders 实现 buil
 
 案例构造 ApiSession(tenant=..., base=..., default_user=..., role=..., transport=...)；base 明确，role 只是会话上下文，项目不必使用默认 cli/mgr helpers。mock transport.request(method,url,headers,data,timeout) 返回 (http_status, decoded_body)，真实网络默认 transport 由统一 HTTP 入口提供。认证缓存、刷新和凭据访问放项目 TokenProvider。禁止在 Core 写 OAuth、签名、业务路径或默认用户。
 
+API 1.1 另提供可选的 RequestEncoder、RequestSigner、PreparedHttpTransport 和不可变 PreparedRequest。通过 ApiSession 的 request_encoder/request_signer/prepared_transport 显式采用；准备正文只编码一次，签名与实际发送共用 bytes，准备路径拒绝重定向。旧 transport 继续接收 Python data；不能与新准备协议混用。`data=None` 仍无正文，`data=JSON_NULL` 明确 JSON null，`raw_body=b''` 明确空正文。详见[请求准备与签名](../guides/请求准备与签名.md)与 `examples/adapter_recipes/signing.py`。算法、查询规则和精确金额编码仍归 Pack。
+
 ## 8. 案例编写与结果
 
 骨架 readonly_cases.py 有 SUITES、CATALOG、CAT、RUNNERS、RUNNER_API、exec_case。按自身项目改 case ID、suite、group、desc、mode、expect、api、expected；runner 映射须存在，ID 唯一，suite.parent 必须对应导航。先保留离线验收案例，再新增一条真实 SAFE 案例，不要直接批量生成业务写操作。
@@ -182,6 +184,10 @@ UI 验收：所选 Pack 名称正确、case 列表正确、未声明资源入口
 报告整体状态；需关注列出真实业务未执行项、缺失证据和待授权操作；已完成列 manifest/Adapter/案例与路径；验证区分通过/失败/未执行，给出精确命令与报告；数据变更列新建文件、mock 历史、真实写入和清理结果。报告中不得输出密码、token 或完整 DSN。未经用户要求不提交推送、不部署真实环境。
 
 本手册与生成器、验收工具和回归测试共同维护。接入成功后，更新 Pack 自身 README，记录实际能力、契约来源、运行限制和下一条可执行命令，让下一位 Agent 无须猜测。
+
+新生成 Pack 同时声明 capability_adoption，默认均未运行能力验证。doctor、project_tasks、GET /api/platform 与默认页面使用同一采用清单；采用方式、必需性、证据状态和验证范围独立。主动关闭可选资源池可交付，声明为必需的能力缺少当前有效证据为 incomplete。旧 Pack 未声明保持兼容，显示待补充。记录过程与迁移格式见[能力采用清单](../guides/能力采用清单.md)，不能把平台支持的 features 当成本 Pack 的运行采用证明。
+
+自定义 panel_html 可使用[工作台交互组件](../guides/工作台交互组件.md)和 `examples/workbench_components/` 两个合成页面，复用既有执行与安全客户端。字段、业务幂等、详情投影、排序、分页和精确表示均由 Pack 显式配置；任务终态不等于业务成功。浏览器恢复仅查询原任务，不重新提交写操作。
 
 ## 14. 逐条执行与写开关
 

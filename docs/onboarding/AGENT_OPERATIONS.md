@@ -33,7 +33,7 @@ python3 scripts/project_tasks.py --pack my_app record --task adapter --evidence 
 
 ## 协议版本与升级门禁
 
-生成器声明 `platform_api`：`{"min":"1.0","max_exclusive":"2.0","features":["request_id"]}`。Core 在 bootstrap 前验证范围、字段类型、重复及所需能力；不兼容时拒绝装载。旧 Pack 未声明时按现有协议兼容，但体检会提示补显式约束。GET /api/platform 返回当前版本、支持能力与当前 Pack 兼容结果。升级先体检与定向回归，再启动独立验收进程，不直接替换运行中的业务配置。
+生成器声明 `platform_api`：`{"min":"1.1","max_exclusive":"2.0","features":["request_id","capability_adoption"]}`。Core 在 bootstrap 前验证范围、字段类型、重复及所需能力；不兼容时拒绝装载。旧 Pack 未声明时按现有协议兼容，但体检会提示补显式约束。GET /api/platform 返回当前版本、支持能力与当前 Pack 兼容结果。升级先体检与定向回归，再启动独立验收进程，不直接替换运行中的业务配置。
 
 ## 执行队列和卡死隔离
 
@@ -56,3 +56,12 @@ python3 scripts/project_tasks.py --pack my_app record --task adapter --evidence 
 使用临时独立平台/Pack、独立端口和数据根；只装载已批准的必要角色，证据与业务判断放临时 Pack。少量正向、认证拒绝、角色权限、类型及分页断言分别报告。记录每项实际结果、耗时、覆盖面、缺口与平台执行是否正确，不能把少量通过率外推为整个平台可靠性百分比。
 
 清理自有进程、临时凭据、Pack、配置、池和历史；核对主平台原有配置及业务源指纹。认证产生的远端会话与审计记录按服务契约处理，不能宣称删除本地凭据就已撤销远端 token。对真实写操作没有恢复契约时不执行。
+
+## 请求、采用清单与工作台扩展（API 1.1）
+
+- 请求签名通过可选请求准备协议复用 HTTP 管线；旧 transport 不改变入参。算法、查询规范与精确编码由 Adapter 显式选择，见[请求准备与签名](../guides/请求准备与签名.md)。
+- doctor、任务状态、GET /api/platform 和默认工作台展示同一能力采用清单。采用声明、证据状态和验证范围分开；必需能力缺证据为 incomplete。旧 Pack 显示未声明，可按[能力采用清单](../guides/能力采用清单.md)迁移。
+- 能力证据在执行前通过 capability-context 取得当前绑定，完成后用 record-capability 登记。改声明、Adapter 或适用版本后重新验收，不为旧报告直接贴新标签；real_readonly 不代表真实写入。
+- 自定义 panel_html 可组合使用[工作台交互组件](../guides/工作台交互组件.md)，沿用安全客户端与执行客户端。刷新只恢复查询，任务终态和业务状态由 Pack 分别解释。
+
+扩展机制的自有回环验收：`python3 scripts/accept_foundation_extensions.py --report /tmp/foundation-extensions.json`。浏览器样例使用 `--serve --state /tmp/foundation-panels.json` 临时生成两个隔离 Pack；结束后 Ctrl-C 清理自有进程与数据。全部为合成机制验收，不代表真实业务已验证。

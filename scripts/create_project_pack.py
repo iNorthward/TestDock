@@ -13,6 +13,23 @@ def business_env_key(value):
         raise ValueError('业务地址或认证不能使用平台启动配置键: '+value)
     return value
 
+def capability_declarations(pack_id, contract):
+    """Declare adoption, never runtime verification or inferred business policy."""
+    source = 'integration.py' if contract else 'transport.py'
+    return {'version': 1, 'items': {
+        'http': {'mode': 'core', 'required': False,
+                 'sources': [f'adapter:packs/{pack_id}/{source}'],
+                 'reason': 'Core ApiSession with an explicit Pack transport or HTTP contract; not yet verified'},
+        'resource_pool': {'required': False, 'reason': 'Starter has no shared identity or fixture requirement'},
+        'database_pool': {'mode': 'disabled', 'required': False, 'reason': 'Starter does not access a database'},
+        'background_tasks': {'mode': 'core', 'required': False, 'sources': ['manifest:capability_adoption'], 'reason': 'Default panel uses Core execution jobs'},
+        'request_deduplication': {'mode': 'core', 'required': False, 'sources': ['manifest:capability_adoption'], 'reason': 'Default panel uses Core request identifiers'},
+        'resource_mutex': {'mode': 'unconfigured', 'required': False, 'reason': 'Business resource keys have not been defined'},
+        'ui_components': {'mode': 'core', 'required': False, 'sources': ['manifest:capability_adoption'], 'reason': 'Default panel uses shared Core UI assets'},
+        'evidence_handoff': {'mode': 'unconfigured', 'required': False, 'reason': 'Run project_tasks explicitly to record evidence'},
+        'diagnostics': {'required': False, 'reason': 'Starter enables no optional diagnostics'},
+    }}
+
 def pack_readme(pack_id,port,contract):
     smoke='HTTP-MOCK-R01' if contract else pack_id.upper()+'-R01'
     text=(f'# {pack_id} 接入说明\n\n'
@@ -44,7 +61,12 @@ def pack_readme(pack_id,port,contract):
            '## 后续验收\n\n'
            '本项目 tests 和 regression.json 同步维护；默认资源池与高级诊断关闭，需要时由 pack.json 显式声明。'
            '凭据、历史和数据不提交。真实 GET 仍须确认无写副作用；写用例须独立授权、开关和清理。'
-           '不执行全量业务案例。完整协议见平台根目录 docs/onboarding/AGENT_INTEGRATION.md。\n')
+           '不执行全量业务案例。完整协议见平台根目录 docs/onboarding/AGENT_INTEGRATION.md。\n\n'
+           '## 能力采用与证据\n\n'
+           'pack.json 的 capability_adoption 仅声明采用方式；尚未执行验证。'
+           f'运行 `python3 scripts/project_doctor.py --pack {pack_id} --mock-case {smoke}` 查看采用清单。'
+           '采用方式、必需性和验证范围分别维护，按 docs/guides/能力采用清单.md 记录当前版本的证据。'
+           '签名请求和自定义工作台分别参见 docs/guides/请求准备与签名.md、docs/guides/工作台交互组件.md。\n')
     return text
 
 def http_contract(path):
@@ -102,10 +124,11 @@ def create(pack_id,name,port,*,root=ROOT,contract_file=None):
             (stage/filename).write_text(adapter)
         text=(source/'readonly_cases.py').read_text().replace('examples.demo_pack','packs.'+pack_id).replace('DEMO-R01',pack_id.upper()+'-R01').replace('demo-readonly',pack_id+'-readonly').replace('demo-tenant',pack_id+'-tenant').replace('demo-reader',pack_id+'-reader').replace('https://demo.invalid','https://'+pack_id.replace('_','-')+'.invalid').replace('Demo ·',name+' ·')
         (stage/'cases/readonly_cases.py').write_text(text)
-        manifest={'platform_api':{'min':'1.0','max_exclusive':'2.0','features':['request_id']},'id':pack_id,'display_name':name,'default':False,'bootstrap':'packs.'+pack_id+':install',
+        manifest={'platform_api':{'min':'1.1','max_exclusive':'2.0','features':['request_id','capability_adoption']},'id':pack_id,'display_name':name,'default':False,'bootstrap':'packs.'+pack_id+':install',
             'case_dirs':[str(Path('packs')/pack_id/'cases')],'navigation':[{'id':'demo','name':'离线接入验收','parents':['demo']}],
             'regression_manifest':str(Path('packs')/pack_id/'regression.json'),'identity_pool_file':'data/identity_pool.json','identity_requirements':{},'resource_pool':{'enabled':False},
-            'config_defaults':{'PLATFORM_PACK_DATA_DIR':'data/'+pack_id,'PLATFORM_ARTIFACT_ROOT':'artifacts/'+pack_id,'PLATFORM_PANEL_PORT':str(port)}}
+            'config_defaults':{'PLATFORM_PACK_DATA_DIR':'data/'+pack_id,'PLATFORM_ARTIFACT_ROOT':'artifacts/'+pack_id,'PLATFORM_PANEL_PORT':str(port)},
+            'diagnostic_capabilities':[], 'capability_adoption':capability_declarations(pack_id,contract)}
         (stage/'pack.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
         (stage/'tests').mkdir();(stage/'tests/__init__.py').write_text('')
         test_code=("import unittest\nfrom packs."+pack_id+".transport import MockTransport\n\n"

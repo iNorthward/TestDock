@@ -23,11 +23,28 @@
   "resource_pool": {
     "enabled": false
   },
+  "diagnostic_capabilities": [],
+  "capability_adoption": {
+    "version": 1,
+    "items": {
+      "http": {"mode": "core", "required": false, "sources": ["manifest:bootstrap"], "reason": "Offline demo composes Core ApiSession and synthetic transport"},
+      "resource_pool": {"required": false, "reason": "Offline demo needs no identity resources"},
+      "database_pool": {"mode": "disabled", "required": false, "reason": "Offline demo has no external database"},
+      "background_tasks": {"mode": "core", "required": false, "sources": ["manifest:capability_adoption"], "reason": "Shared panel uses Core execution jobs"},
+      "request_deduplication": {"mode": "core", "required": false, "sources": ["manifest:capability_adoption"], "reason": "Shared panel keeps Core request identifiers"},
+      "resource_mutex": {"mode": "unconfigured", "required": false, "reason": "Offline demo has no business resource keys"},
+      "ui_components": {"mode": "core", "required": false, "sources": ["manifest:capability_adoption"], "reason": "Shared panel uses Core UI assets"},
+      "evidence_handoff": {"mode": "unconfigured", "required": false, "reason": "Evidence recording must be explicitly executed"},
+      "diagnostics": {"required": false, "reason": "Offline demo has no optional diagnostics"}
+    }
+  },
   "platform_api": {
-    "min": "1.0",
+    "min": "1.1",
     "max_exclusive": "2.0",
     "features": [
-      "request_id"
+      "request_id",
+      "capability_adoption",
+      "workbench_components"
     ]
   }
 }

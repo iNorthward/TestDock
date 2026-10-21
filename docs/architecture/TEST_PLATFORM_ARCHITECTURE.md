@@ -1,7 +1,7 @@
 # TestDock 独立测试平台架构白皮书
 
-> 文档版本：v2.1 · 核对日期：2026-10-09
-> 适用范围：当前独立平台源码与已交付验收证据。文档版本与平台 API 版本独立；当前 API 为 1.0。
+> 文档版本：v2.2 · 核对日期：2026-10-21
+> 适用范围：当前独立平台源码与已交付验收证据。文档版本与平台 API 版本独立；当前 API 为 1.1。下文带日期的历史验收记录保留原适用范围。
 
 ## 1. 定位与验收目标
 
@@ -55,7 +55,7 @@ PLATFORM_ENV_FILE 选择环境文件，PLATFORM_PACKS 选择单个 Pack。每个
 | execution_contract_sources | 契约名称到项目路径配置键，用于执行版本指纹 |
 | execution_policy | 明确允许隔离的只读案例 ID 与执行时限，不是写操作回滚策略 |
 
-当前平台 API 1.0 声明 request_id、resource_pool、diagnostics、response_decoder、bounded_queue、history_compare、isolated_readonly。GET /api/platform 返回版本、能力、当前 Pack 与兼容结果。未声明 platform_api 的旧 Pack 暂按现有协议兼容，体检提示补显式范围；兼容并不证明业务正确。
+当前平台 API 1.1 声明 request_id、resource_pool、diagnostics、response_decoder、bounded_queue、history_compare、isolated_readonly、prepared_requests、capability_adoption、workbench_components。GET /api/platform 返回版本、平台支持能力、当前 Pack 兼容结果和独立的 capabilityAdoption。未声明 platform_api 的旧 Pack 暂按现有协议兼容，体检提示补显式范围；兼容和采用声明均不证明运行或业务正确。
 
 资源池没有必选用户、代理、管理用户、场景或夹具模型。接入者可以定义适合自身项目的分类，也可以完全关闭资源能力。分类标签不能替代业务角色授权，维护建议不能代替真实账号有效性测试。
 
@@ -69,6 +69,8 @@ ApiSession 使用当前项目的 TokenProvider、RequestAuthProvider、HttpTrans
 
 协议细节见[序列化与反序列化规范](平台序列化与反序列化规范.md)与[Adapter 配方](../../examples/adapter_recipes/README.md)。
 
+API 1.1 增加可选请求准备路径：Adapter 编码 → 冻结目标与 bytes → Adapter 签名 → 默认网络或 prepared transport 原样发送。旧 transport 与默认 JSON 行为继续可用。新路径拒绝重定向，不自动重试写请求；无正文、空正文和 JSON null 分别表示，算法、查询与数值策略不进入 Core。迁移与样例见[请求准备与签名](../guides/请求准备与签名.md)。
+
 ## 6. 接入与 Agent 证据闭环
 
 1. 从完整接入手册确认范围、角色、接口、字段与只读证据。
@@ -81,6 +83,10 @@ ApiSession 使用当前项目的 TokenProvider、RequestAuthProvider、HttpTrans
 证据缺失不能完成任务，文件改变或删除会变成 stale。--require-real 将真实验证设为必需；mock 成功不能关闭真实任务。scope 约束真实 case ID，报告不能越界。证据来自可信接入者，平台不将其冒充远端服务的签名证明。
 
 体检不登录、不请求真实业务；ready 仅说明所查接入条件成立。它不代替真实字段、认证、数据有效性或数据库正确性验收。下一步具体命令见[快速接入](../onboarding/QUICKSTART.md)、[完整 Agent 手册](../onboarding/AGENT_INTEGRATION.md)与[操作及证据手册](../onboarding/AGENT_OPERATIONS.md)。
+
+capability_adoption 显式记录 Core 复用、Pack 实现、主动关闭、未配置或不可用，独立保留验证状态和范围。doctor、任务状态、API 和默认页面复用同一投影。能力报告绑定当前声明、平台版本和相关 Adapter 源码，报告或输入改变后失效；旧 Pack 未声明可继续装载，必需能力缺证据为 incomplete。详见[能力采用清单](../guides/能力采用清单.md)。
+
+自定义工作台可组合使用局部反馈、任务恢复、详情弹框、白名单表单、只读列表与精确文本展示组件，沿用现有安全与执行客户端。Pack 保留业务状态解释、作用域、字段投影及排序分页策略。两个不同页面仅为合成示例，见[组件指南](../guides/工作台交互组件.md)。
 
 ## 7. 执行容量、去重与停止
 

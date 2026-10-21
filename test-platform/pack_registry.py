@@ -178,6 +178,8 @@ def _validate_manifest(manifest, manifest_path):
     from platform_protocol import compatibility
     compatibility(pack)
     diagnostic_capabilities(pack)
+    from platform_capabilities import validate_adoption
+    validate_adoption(manifest)
     catalog_policy=pack.get('catalog_policy',{})
     if (not isinstance(catalog_policy,dict) or set(catalog_policy)-{'group_tokens','require_readonly_baseline'}
             or not isinstance(catalog_policy.get('group_tokens',[]),list)

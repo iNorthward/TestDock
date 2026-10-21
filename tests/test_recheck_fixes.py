@@ -34,7 +34,7 @@ class RecheckTests(unittest.TestCase):
             root = Path(temporary)
             for folder in ('test-platform', 'scripts', 'examples', 'resources'):
                 shutil.copytree(ROOT / folder, root / folder, ignore=shutil.ignore_patterns('__pycache__'))
-            for name in ('platform_config.py', 'timezone_config.py', 'platform_protocol.py'):
+            for name in ('platform_config.py', 'timezone_config.py', 'platform_protocol.py', 'platform_capabilities.py'):
                 shutil.copyfile(ROOT / name, root / name)
             create('my_app', 'Synthetic application', 18802, root=root)
             failed = diagnose('my_app', root=root, mock_case='DEMO-R01')

@@ -21,8 +21,11 @@
 from __future__ import annotations
 
 import json
+import re
 import socket
 from contextvars import ContextVar
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from weakref import WeakKeyDictionary
 import urllib.error
 import urllib.parse
@@ -47,6 +50,93 @@ def _origin(url):
 
 OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), SameOriginRedirect())
 DEFAULT_TIMEOUT = 30
+
+
+class NoPreparedRedirect(urllib.request.HTTPRedirectHandler):
+    """A prepared target cannot change after signing, even within one origin."""
+
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        return None
+
+
+PREPARED_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoPreparedRedirect())
+_RAW_BODY_UNSET = object()
+
+
+class _JsonNull:
+    def __repr__(self):
+        return "JSON_NULL"
+
+
+JSON_NULL = _JsonNull()
+"""Explicit JSON null. Existing data=None continues to mean no body."""
+
+
+def _prepared_headers(headers, body):
+    if not isinstance(headers, Mapping):
+        raise TypeError("准备请求的 headers 须为映射")
+    result, names = {}, set()
+    for name, value in headers.items():
+        if not isinstance(name, str) or not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", name):
+            raise ValueError("准备请求包含非法 header 名称")
+        if not isinstance(value, str) or any(ord(char) < 32 and char != "\t" or ord(char) == 127 for char in value):
+            raise ValueError("准备请求包含非法 header 值")
+        lower = name.lower()
+        if lower in names:
+            raise ValueError("准备请求包含重复 header")
+        if lower == "transfer-encoding":
+            raise ValueError("固定正文准备请求不支持 Transfer-Encoding")
+        if lower == "connection":
+            # urllib's HTTP handler unconditionally sends Connection: close.
+            # Freeze that exact value before signing for every transport.
+            if value.lower() != "close":
+                raise ValueError("准备请求 Connection 只允许 close")
+            value = "close"
+        if (lower == "content-length" and body is not _RAW_BODY_UNSET
+                and value != str(len(body) if body is not None else 0)):
+            raise ValueError("Content-Length 与准备正文不一致")
+        names.add(lower)
+        result[name] = value
+    if "connection" not in names:
+        result["Connection"] = "close"
+    return MappingProxyType(result)
+
+
+@dataclass(frozen=True)
+class PreparedRequest:
+    """Immutable HTTP intent; repr deliberately omits URL, headers and body."""
+
+    method: str
+    url: str = field(repr=False)
+    headers: Mapping[str, str] = field(repr=False)
+    body: Optional[bytes] = field(repr=False)
+
+    def __post_init__(self):
+        if not isinstance(self.method, str) or not re.fullmatch(r"[A-Z]+", self.method):
+            raise ValueError("准备请求 method 须为大写 HTTP 方法")
+        # urllib removes controls/whitespace and URL wrappers. Reject these
+        # before the signer can observe a target different from the wire target.
+        if not isinstance(self.url, str) or any(ord(char) <= 32 or ord(char) >= 127 for char in self.url):
+            raise ValueError("准备请求 URL 须为已编码、无空白的 HTTP(S) 地址")
+        _origin(self.url)
+        if urllib.parse.urlsplit(self.url).fragment or "#" in self.url:
+            raise ValueError("准备请求 URL 不允许 fragment")
+        parsed = urllib.parse.urlsplit(self.url)
+        if not parsed.path:
+            # HTTP transmits '/' for an empty path. Expose that target before
+            # signing instead of leaving the default transport to add it.
+            object.__setattr__(self, "url", urllib.parse.urlunsplit(parsed._replace(path="/")))
+        if self.body is not None and not isinstance(self.body, bytes):
+            raise TypeError("准备请求 body 须为 bytes 或 None")
+        object.__setattr__(self, "headers", _prepared_headers(self.headers, self.body))
+
+    @property
+    def path(self):
+        return urllib.parse.urlsplit(self.url).path or "/"
+
+    @property
+    def query(self):
+        return urllib.parse.urlsplit(self.url).query
 
 # Adapter registrations shared by the selected Pack; adapters own token caches.
 _TOKEN_PROVIDER = None
@@ -73,6 +163,82 @@ class HttpTransport(Protocol):
 
     def request(self, method: str, url: str, headers: Mapping[str, str], *,
                 data=None, timeout=DEFAULT_TIMEOUT): ...
+
+
+class RequestEncoder(Protocol):
+    """Encode one supplied JSON value; explicit JSON_NULL is passed as None."""
+
+    def encode(self, data, *, method: str, url: str) -> bytes: ...
+
+
+class JsonRequestEncoder:
+    """Ordinary JSON only; exact numeric strategies belong to the Adapter."""
+
+    def encode(self, data, *, method: str, url: str) -> bytes:
+        return json.dumps(data, allow_nan=False).encode("utf-8")
+
+
+class RequestSigner(Protocol):
+    """Read frozen intent and return additional signature headers only."""
+
+    def sign(self, request: PreparedRequest) -> Mapping[str, str]: ...
+
+
+class PreparedHttpTransport(Protocol):
+    """Consume exact bytes without encoding, redirects or implicit retries.
+
+    Like legacy fake transports, an injected transport returns a decoded
+    (http_status, body) pair and owns its response decoding strategy.
+    """
+
+    def request_prepared(self, request: PreparedRequest, *, timeout=DEFAULT_TIMEOUT): ...
+
+
+def _preparation_enabled(data, raw_body, request_encoder, request_signer, prepared_transport):
+    return (data is JSON_NULL or raw_body is not _RAW_BODY_UNSET or request_encoder is not None
+            or request_signer is not None or prepared_transport is not None)
+
+
+def _validate_transport(transport, prepared_transport, prepared):
+    if prepared and transport is not None:
+        raise ValueError("准备请求不能使用旧 transport；请显式实现 prepared_transport.request_prepared")
+    if prepared_transport is not None and not callable(getattr(prepared_transport, "request_prepared", None)):
+        raise TypeError("prepared_transport 须实现 request_prepared")
+
+
+def prepare_request(method, url, headers, *, data=None, raw_body=_RAW_BODY_UNSET,
+                    request_encoder=None, request_signer=None):
+    """Encode once, freeze, then append signature headers without changing intent.
+
+    data=None has no body; data=JSON_NULL encodes null; raw_body=b'' is an
+    explicit empty body. Raw bytes bypass the JSON encoder entirely.
+    """
+    if raw_body is not _RAW_BODY_UNSET and data is not None:
+        raise ValueError("data 与 raw_body 不能同时提供")
+    # Validate the target and base headers before calling any Adapter hook.
+    if not isinstance(method, str):
+        raise TypeError("准备请求 method 须为字符串")
+    target = PreparedRequest(method.upper(), url, {}, None)
+    _prepared_headers(headers, _RAW_BODY_UNSET)
+    if raw_body is not _RAW_BODY_UNSET:
+        body = raw_body
+    elif data is None:
+        body = None
+    else:
+        encoder = request_encoder if request_encoder is not None else JsonRequestEncoder()
+        body = encoder.encode(None if data is JSON_NULL else data, method=target.method, url=target.url)
+        if not isinstance(body, bytes):
+            raise TypeError("RequestEncoder.encode 必须返回 bytes")
+    request = PreparedRequest(target.method, target.url, headers, body)
+    if request_signer is not None:
+        additional = request_signer.sign(request)
+        if not isinstance(additional, Mapping):
+            raise TypeError("RequestSigner.sign 必须返回 header 映射")
+        names = {name.lower() for name in request.headers}
+        if any(isinstance(name, str) and name.lower() in names for name in additional):
+            raise ValueError("签名头不能覆盖准备请求的已有 header")
+        request = PreparedRequest(request.method, request.url, {**request.headers, **additional}, request.body)
+    return request
 
 
 class ResponseDecoder(Protocol):
@@ -132,11 +298,32 @@ def http(
     transport: Optional[HttpTransport] = None,
     response_decoder: Optional[ResponseDecoder] = None,
     validate_auth=True,
+    *,
+    raw_body=_RAW_BODY_UNSET,
+    request_encoder: Optional[RequestEncoder] = None,
+    request_signer: Optional[RequestSigner] = None,
+    prepared_transport: Optional[PreparedHttpTransport] = None,
 ):
     """底层请求。返回 (http_status, JSON dict)；2xx 文件响应返回二进制元信息。"""
     from execution_jobs import checkpoint
 
     checkpoint()
+    prepared = _preparation_enabled(data, raw_body, request_encoder, request_signer, prepared_transport)
+    _validate_transport(transport, prepared_transport, prepared)
+    if prepared:
+        request = prepare_request(method, url, headers, data=data, raw_body=raw_body,
+                                  request_encoder=request_encoder, request_signer=request_signer)
+        validator = request_auth or _REQUEST_AUTH
+        if validate_auth and validator is not None:
+            validator.validate_headers(request.headers)
+        checkpoint()
+        if prepared_transport is not None:
+            return prepared_transport.request_prepared(request, timeout=timeout)
+        req = urllib.request.Request(request.url, data=request.body, headers=dict(request.headers), method=request.method)
+        if req.full_url != request.url or req.get_method() != request.method or req.data != request.body:
+            raise ValueError("传输改变了准备请求")
+        return _send_http(req, PREPARED_OPENER, timeout=timeout, response_decoder=response_decoder,
+                          hide_transport_details=True)
     validator = request_auth or _REQUEST_AUTH
     if validate_auth and validator is not None:
         validator.validate_headers(headers)
@@ -146,8 +333,13 @@ def http(
         )
     body = json.dumps(data).encode() if data is not None else None
     req = urllib.request.Request(url, data=body, headers=dict(headers), method=method)
+    return _send_http(req, OPENER, timeout=timeout, response_decoder=response_decoder)
+
+
+def _send_http(req, opener, *, timeout, response_decoder, hide_transport_details=False):
+    method, url = req.get_method(), req.full_url
     try:
-        with OPENER.open(req, timeout=timeout) as r:
+        with opener.open(req, timeout=timeout) as r:
             return _decode_response(r.status, r, method=method, url=url, decoder=response_decoder)
     except urllib.error.HTTPError as e:
         try:
@@ -158,7 +350,8 @@ def http(
     except (TimeoutError, socket.timeout) as e:
         return 0, {"_transport_error": True, "_error": "HTTP 请求超时"}
     except urllib.error.URLError as e:
-        return 0, {"_transport_error": True, "_error": str(e.reason or e)}
+        detail = "HTTP 连接失败；未自动重发" if hide_transport_details else str(e.reason or e)
+        return 0, {"_transport_error": True, "_error": detail}
 
 
 def _decode_response(status, response, *, method='', url='', decoder=None):
@@ -248,7 +441,12 @@ class ApiSession:
         request_auth: Optional[RequestAuthProvider] = None,
         transport: Optional[HttpTransport] = None,
         response_decoder: Optional[ResponseDecoder] = None,
+        request_encoder: Optional[RequestEncoder] = None,
+        request_signer: Optional[RequestSigner] = None,
+        prepared_transport: Optional[PreparedHttpTransport] = None,
     ):
+        _validate_transport(transport, prepared_transport,
+                            _preparation_enabled(None, _RAW_BODY_UNSET, request_encoder, request_signer, prepared_transport))
         self.tenant = tenant
         # Pool role references are lazy; truth-testing them reads project data
         # during adapter bootstrap and can recursively initialize the pack.
@@ -259,6 +457,9 @@ class ApiSession:
         self.request_auth = request_auth
         self.transport = transport
         self.response_decoder = response_decoder
+        self.request_encoder = request_encoder
+        self.request_signer = request_signer
+        self.prepared_transport = prepared_transport
 
     def _token_state(self):
         states = _SESSION_TOKENS.get()
@@ -353,12 +554,20 @@ class ApiSession:
         timeout=DEFAULT_TIMEOUT,
         extra_headers=None,
         allow_external=False,
+        raw_body=_RAW_BODY_UNSET,
     ):
         """发请求。with_token=True 时自动 ensure_token（可用 token= 覆盖）。"""
         from execution_jobs import checkpoint
 
         checkpoint()
+        prepared = _preparation_enabled(data, raw_body, self.request_encoder, self.request_signer, self.prepared_transport)
+        _validate_transport(self.transport, self.prepared_transport,
+                            prepared)
         url = _abs_url(self.base, path_or_url, params)
+        if prepared:
+            if not isinstance(method, str):
+                raise TypeError("准备请求 method 须为字符串")
+            url = PreparedRequest(method.upper(), url, {}, None).url
         external = _origin(url) != _origin(self.base)
         if external:
             if not allow_external:
@@ -367,7 +576,8 @@ class ApiSession:
                 raise ValueError("跨源请求禁止自定义请求头")
             return http(method, url, {"Content-Type": "application/json"}, data=data,
                         timeout=timeout, transport=self.transport, response_decoder=self.response_decoder,
-                        validate_auth=False)
+                        validate_auth=False, raw_body=raw_body, request_encoder=self.request_encoder,
+                        prepared_transport=self.prepared_transport)
         if with_token and token is None:
             user = self.resolve_user(username)
             has_role_reference = hasattr(user, "category") and hasattr(user, "role")
@@ -387,11 +597,12 @@ class ApiSession:
             tenant=tenant,
             extra=extra_headers,
         )
-        url = _abs_url(self.base, path_or_url, params)
         return http(
             method, url, hdrs, data=data, timeout=timeout,
             request_auth=self.request_auth, transport=self.transport,
             response_decoder=self.response_decoder,
+            raw_body=raw_body, request_encoder=self.request_encoder,
+            request_signer=self.request_signer, prepared_transport=self.prepared_transport,
         )
 
     def get(self, path, **kw):

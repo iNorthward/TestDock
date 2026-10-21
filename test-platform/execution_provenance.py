@@ -143,6 +143,20 @@ def refresh_case_runtime_snapshot(snapshot, case_paths):
         state['caseSources'] = names
 
 
+def runtime_source_status():
+    """Safe source drift status without reading contracts or identity-pool data."""
+    disk = capture_code_snapshot()
+    with _RUNTIME_LOCK:
+        state = _RUNTIME_SNAPSHOTS.get(disk['key'])
+        runtime = dict(state['sources']) if state else None
+        uncertain = sorted(state['uncertainSources']) if state else []
+        case_names = set(state['caseSources']) if state else set()
+    drift = sorted(_changed_sources(runtime, disk['sources'])) if runtime is not None else []
+    return {'basis': 'catalog-load-source-snapshot', 'runtimeKnown': runtime is not None,
+            'loadedBytecodeVerified': False, 'diskDriftSources': drift,
+            'restartRequired': runtime is None or bool(uncertain or (set(drift) - case_names))}
+
+
 def execution_metadata(options=None):
     pack = load_packs()[0]
     disk = capture_code_snapshot()

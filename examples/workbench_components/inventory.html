@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>合成库存观察站 · 组件样例</title>
+<link rel="stylesheet" href="/assets/workbench-components.css"><link rel="stylesheet" href="./demo.css">
+<script src="/assets/execution-client.js" defer></script><script src="/assets/workbench-components.js" defer></script><script src="./demo.js" defer></script></head>
+<body data-example="inventory"><main>
+<header class="hero"><span class="eyebrow">SYNTHETIC / demo_inventory</span><h1>库存观察站</h1><p>这是浏览器内生成数据的组件演示。全部任务、记录与数量均为合成内容，不连接业务服务。</p><a href="./schedule.html">查看另一种页面：空间预约台 →</a></header>
+<div class="columns"><section class="card"><h2>整理一份观察记录</h2><p>输入后保持焦点直接刷新；选项加载期间也保留先前选择。</p>
+<label>观察站点<select id="scope"><option value="north">北侧库房</option><option value="south">南侧库房</option></select></label>
+<label>物品备注<input id="inventory-note" autocomplete="off" placeholder="例如：蓝色收纳盒"></label>
+<label>物品类别<select id="inventory-kind"><option value="">类别加载中…</option></select></label>
+<label>观察数量（精确文本）<input id="inventory-count" inputmode="decimal" autocomplete="off" placeholder="1.000000000000000001"></label>
+<p id="form-status" class="wb-feedback"></p></section>
+<section class="card"><h2>合成整理任务</h2><p>启动仅创建浏览器记录。刷新后恢复同一 executionId 的查询，不重新启动任务。</p><div class="actions"><button id="start-task">启动合成任务</button><button id="resume-task" class="secondary">恢复原任务查询</button></div>
+<label class="check"><input id="task-failure" type="checkbox">模拟任务查询断开</label><p id="task-status" class="wb-feedback"></p><pre id="task-result">尚未取得任务结果。</pre></section></div>
+<section class="card"><div class="section-head"><div><h2>批次观察记录</h2><p>筛选、条数变化会从首屏读取；旧响应不会覆盖新查询。</p></div><label>每页条数<select id="limit"><option value="3">3 条</option><option value="5">5 条</option></select></label></div>
+<label>只读筛选<input id="search" autocomplete="off" placeholder="输入 slow 触发慢查询，再立即输入新条件"></label>
+<div class="actions"><button id="refresh" class="secondary">刷新只读列表</button><button id="more" class="secondary">下一页</button></div><p id="list-status" class="wb-feedback"></p>
+<div class="wb-table-scroll"><table><thead><tr><th>记录</th><th>类别</th><th>精确数量</th><th>时间 · Asia/Shanghai</th><th>操作</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+<section class="card exact-card"><h2>精确文本与就近复制</h2><p>仅删显示层的冗余尾零；原值保留在悬停提示和复制内容中。</p><code id="exact-value"></code><button id="copy" class="secondary">复制原始精确文本</button><p id="copy-status" class="wb-feedback"></p></section>
+<footer>无真实业务验收含义 · 同一组件库，字段与规则由页面显式提供。</footer></main>
+<dialog id="details" class="wb-dialog" aria-labelledby="details-title"><header><h2 id="details-title">观察记录详情</h2><button id="close-details" class="secondary" aria-label="关闭详情">关闭</button></header><p id="details-status" class="wb-feedback"></p><pre id="details-content"></pre><label class="check"><input id="details-failure" type="checkbox">模拟后续详情读取失败</label><button id="retry-details" class="secondary">重试只读查询</button></dialog>
+</body></html>

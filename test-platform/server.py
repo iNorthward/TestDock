@@ -646,10 +646,16 @@ class H(BaseHTTPRequestHandler):
             from resource_pool_config import selected_definition
             from pack_registry import diagnostic_capabilities
             from platform_protocol import API_VERSION, FEATURES, compatibility
+            from platform_capabilities import adoption_report
+            from execution_provenance import runtime_source_status
             self._json(200, {'ok': True, 'data': {
                 'pack': cat.PACKS[0]['id'], 'platformApiVersion': API_VERSION, 'platformFeatures': sorted(FEATURES),
                 'compatibility': compatibility(cat.PACKS[0]), 'resourcePool': selected_definition(),
                 'diagnostics': diagnostic_capabilities(cat.PACKS[0]),
+                'runtimeSource': runtime_source_status(),
+                'capabilityAdoption': adoption_report(
+                    json.loads(cat.PACKS[0]['manifest_path'].read_text(encoding='utf-8')),
+                    root=REPO, pack_id=cat.PACKS[0]['id']),
                 'name': cat.PACKS[0].get('display_name', cat.PACKS[0]['id'])}})
             return
         if p.path == "/api/execution/queue":

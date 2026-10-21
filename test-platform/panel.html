@@ -11,6 +11,8 @@
 <link rel="stylesheet" href="/assets/workspace-shell.css">
 <script src="/assets/theme-switcher.js" defer></script>
 <script src="/assets/execution-client.js"></script>
+<script src="/assets/workbench-components.js"></script>
+<link rel="stylesheet" href="/assets/workbench-components.css">
 <script src="/assets/workspace-shell.js" defer></script>
 </head>
 <body>
@@ -36,6 +38,7 @@
 <div class="stat"><div class="stat-label">只读 / SAFE</div><div class="stat-value" id="safe-cases">—</div><div class="stat-note">可从工作台发起执行</div></div>
 <div class="stat"><div class="stat-label">测试套件</div><div class="stat-value" id="total-suites">—</div><div class="stat-note">按项目定义组织测试</div></div>
 </div><div class="home-section-row"><h2 class="home-section">工具</h2></div><div class="home-panel home-tool-table"><a class="home-tool-row" data-diagnostic="contract" style="display:none" href="/insights?tab=inspect"><span class="ht-ico">🔄</span><div><div class="ht-title">Apifox 巡检</div><div class="ht-desc">契约差异 · 接口覆盖 · 巡检报告</div></div></a><a class="home-tool-row" data-diagnostic="database" style="display:none" href="/insights?tab=db-inspection"><span class="ht-ico">🗄</span><div><div class="ht-title">数据库巡检</div><div class="ht-desc">表结构变更 · 影响分析 · Schema 报告</div></div></a></div><div class="home-section-row"><h2 class="home-section">洞察</h2></div><div class="home-panel home-tool-table"><a class="home-tool-row" href="/insights"><span class="ht-ico">📊</span><div><div class="ht-title">测试洞察面板</div><div class="ht-desc">接口覆盖 · 回归历史 · Flaky 检测</div></div></a></div><div class="home-section-row"><h2 class="home-section">文档</h2></div><div class="home-panel home-tool-table"><a class="home-tool-row" href="/whitepaper"><span class="ht-ico">📖</span><div><div class="ht-title">平台白皮书</div><div class="ht-desc">运行模式 · 用例系列 · 环境与验收规范</div></div></a></div></div></div></section>
+<details id="adoption-panel" class="panel wb-adoption"><summary>底座能力采用情况</summary><p id="adoption-summary" role="status">正在读取当前项目声明…</p><p class="muted">采用声明与验证事实分别列出；模拟验证不代表真实业务验收。</p><div class="tw"><table><thead><tr><th>能力</th><th>采用方式</th><th>交付要求</th><th>验证事实</th><th>验证范围 / 证据</th><th>原因 / 限制</th></tr></thead><tbody id="adoption-rows"></tbody></table></div></details>
 <div class="page-heading"><div><h1 id="page-title">用例工作台</h1><p class="subtitle" id="page-description">查看项目用例，让每一次执行都有迹可循。</p></div><button class="btn" id="reload" type="button">↻ 刷新目录</button></div>
 <p id="catalog-pending" class="muted" role="status" hidden>用例文件已更新，等待当前执行结束后重载。</p>
 <section id="case-view">
@@ -122,8 +125,27 @@ async function pollCatalogRevision(){
  finally{revisionChecking=false;}
 }
 async function loadCapabilities(){
- try{const data=await api('/api/platform');packId=data.pack;document.querySelectorAll('[data-diagnostic]').forEach(node=>{node.hidden=!(data.diagnostics||[]).includes(node.dataset.diagnostic);node.style.display=node.hidden?'none':'';});restoreActiveJob();resourceDefinition=data.resourcePool||{enabled:false};$('nav-resources').hidden=!resourceDefinition.enabled;setText('resource-nav-label',resourceDefinition.title||'项目资源');setText('resource-title',resourceDefinition.title||'项目资源');setText('resource-description',resourceDefinition.description||'');if(!resourceDefinition.enabled&&currentView==='resources')location.hash='/home';}
+ try{const data=await api('/api/platform');packId=data.pack;renderAdoption(data.capabilityAdoption,data.runtimeSource);document.querySelectorAll('[data-diagnostic]').forEach(node=>{node.hidden=!(data.diagnostics||[]).includes(node.dataset.diagnostic);node.style.display=node.hidden?'none':'';});restoreActiveJob();resourceDefinition=data.resourcePool||{enabled:false};$('nav-resources').hidden=!resourceDefinition.enabled;setText('resource-nav-label',resourceDefinition.title||'项目资源');setText('resource-title',resourceDefinition.title||'项目资源');setText('resource-description',resourceDefinition.description||'');if(!resourceDefinition.enabled&&currentView==='resources')location.hash='/home';}
  catch(e){showStatus('项目能力读取失败：'+e.message,true);}
+}
+function renderAdoption(report,runtime){
+ const root=$('adoption-rows');root.replaceChildren();
+ const names={http:'HTTP 请求',resource_pool:'身份 / 资源池',database_pool:'数据库连接池',background_tasks:'后台任务',request_deduplication:'请求去重',resource_mutex:'资源互斥',ui_components:'共享 UI',evidence_handoff:'证据接续',diagnostics:'诊断工具'};
+ const modes={core:'复用 Core',pack:'Pack 实现',disabled:'主动关闭',unconfigured:'尚未配置',unavailable:'当前不可用'};
+ const statuses={ready:'声明检查通过',passed:'已验证',failed:'失败',incomplete:'未完成',not_run:'未执行',stale:'证据已失效'};
+ const scopes={synthetic:'合成验收',mock:'离线模拟',real_readonly:'真实只读',manual_review:'人工审阅'};
+ const rows=Array.isArray(report?.items)?report.items:Object.entries(report?.items||{}).map(([id,row])=>({id,...row}));
+ setText('adoption-summary',!report?'能力清单不可用':report.needsMigration?'旧项目尚未声明采用信息，请按接入手册补充。':'当前声明状态：'+(statuses[report.status]||report.status||'未声明'));
+ if(runtime?.restartRequired)$('adoption-summary').textContent+=' 源码或声明与进程快照不一致，请重启后重新核验运行采用情况。';
+ for(const item of rows){
+  const tr=document.createElement('tr'),verification=item.verification||{};
+  const requirement=item.required===true?'必需'+(item.requiredScope?' · '+scopes[item.requiredScope]:''):item.required===false?'可选':'待声明';
+  const fact=(statuses[verification.status]||verification.status||'未执行')+(item.status==='incomplete'?' · 未满足交付要求':'');
+  const evidence=verification.evidence,scope=(scopes[verification.scope]||'—')+(evidence?' · '+evidence.path+' · SHA256 '+evidence.sha256:'');
+  for(const value of [names[item.id]||item.id,modes[item.mode]||'未声明',requirement,fact,scope,item.reason||'待补充']){const td=document.createElement('td');td.textContent=value;td.style.overflowWrap='anywhere';tr.append(td);}
+  if(verification.verifiedAt){const at=document.createElement('small');at.textContent='验证时间：'+PlatformWorkbench.formatTime(new Date(verification.verifiedAt*1000).toISOString(),{timeZone:'Asia/Shanghai'})+' Asia/Shanghai';tr.children[4].append(document.createElement('br'),at);}
+  root.append(tr);
+ }
 }
 async function loadResources(){
  if(!resourceDefinition.enabled)return;

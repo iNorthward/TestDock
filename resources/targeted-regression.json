@@ -49,7 +49,8 @@
         "scripts/check_env.py",
         "scripts/load_env.sh",
         "stop.sh",
-        "platform_protocol.py"
+        "platform_protocol.py",
+        "platform_capabilities.py"
       ],
       "python": [
         "test_platform_isolation",
@@ -80,7 +81,8 @@
         "test_db_config",
         "test_case_result_status",
         "test_audit_fixes",
-        "test_recheck_fixes"
+        "test_recheck_fixes",
+        "test_prepared_requests"
       ],
       "javascript": []
     },
@@ -136,6 +138,9 @@
     "execution-ui": {
       "sources": [
         "assets/execution-client.js",
+        "assets/workbench-components.js",
+        "assets/workbench-components.css",
+        "examples/workbench_components/*",
         "test-platform/panel.html",
         "assets/theme-boot.js",
         "assets/theme-switcher.js",
@@ -150,6 +155,7 @@
       ],
       "javascript": [
         "tests/test_execution_client.js",
+        "tests/test_workbench_components.js",
         "tests/test_theme_contract.js",
         "tests/test_security_client.js"
       ]
@@ -265,6 +271,9 @@
         "scripts/check_neutral_distribution.py",
         "examples/http_pack_template/*",
         "scripts/accept_project_integration.py",
+        "scripts/accept_foundation_extensions.py",
+        "scripts/accept_workbench_browser.py",
+        "platform_capabilities.py",
         "scripts/project_doctor.py",
         "scripts/project_tasks.py",
         "examples/adapter_recipes/*"
@@ -272,7 +281,8 @@
       "python": [
         "test_agent_onboarding",
         "test_project_handoff",
-        "test_adapter_recipes"
+        "test_adapter_recipes",
+        "test_capability_adoption"
       ],
       "javascript": []
     },
