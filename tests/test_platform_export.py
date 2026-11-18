@@ -41,6 +41,10 @@ class PlatformExportTests(unittest.TestCase):
             verified, api = verify_release(rebuilt)
             self.assertIn('packs/demo_pack/pack.json', verified)
             self.assertIn('platform_protocol.py', verified)
+            for path in ('test-platform/ui-scenes.html', 'test-platform/ui-scenes-demo.html',
+                         'assets/ui-scenes.js', 'assets/ui-scenes-demo.js', 'assets/ui-scenes.css',
+                         'docs/guides/统一UI场景规范.md'):
+                self.assertIn(path, verified)
             self.assertIn('workbench_components', api['features'])
             self.assertEqual(verify('demo_pack', root=rebuilt, smoke='DEMO-R01')['mockPassed'], 'DEMO-R01')
 

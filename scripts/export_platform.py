@@ -66,6 +66,7 @@ def _source_inputs(source):
         tests.update(group.get('javascript', []))
     return sorted(set([
         *read_json(source / CORE_INVENTORY), *SUPPORT_FILES, *tests,
+        'test-platform/ui-scenes.html', 'test-platform/ui-scenes-demo.html',
         *_tree_files(source, 'assets'), *_tree_files(source, 'docs/architecture'),
         *_tree_files(source, 'docs/onboarding'), *_tree_files(source, 'docs/guides'),
         *_tree_files(source, 'docs/reports/mature-foundation'), *_tree_files(source, 'docs/reports/six-improvements'),

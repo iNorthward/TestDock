@@ -82,3 +82,21 @@ with tempfile.TemporaryDirectory() as directory:
     handler._serve_repo_asset('escape.txt', asset_root=asset)
     assert codes == [403], codes
 ''')
+
+    def test_ui_scene_pages_are_platform_routes(self):
+        self.probe('''from unittest.mock import Mock
+from server import H, _panel_navigation
+handler = object.__new__(H)
+handler.command = 'GET'
+handler.headers = {'Sec-Fetch-Dest': 'document', 'Sec-Fetch-Mode': 'navigate'}
+handler._html = Mock()
+handler._diagnostic_allowed = lambda path: True
+for url, file in [('/ui-scenes?page=review&scene=E10', 'ui-scenes.html'),
+                  ('/ui-scenes/demo', 'ui-scenes-demo.html')]:
+    handler.path = url
+    assert _panel_navigation(handler, url.split('?')[0])
+    handler._dispatch_GET()
+    target = handler._html.call_args.args[0]
+    assert target.name == file and target.is_file()
+assert not _panel_navigation(handler, '/ui-scenes/unlisted')
+''')

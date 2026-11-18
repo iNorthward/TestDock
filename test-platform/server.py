@@ -56,6 +56,10 @@ _CATALOG_LOCK = cat.REGISTRY_LOCK
 INSPECT_REPORT_DIR = business_knowledge_subpath("PLATFORM_APIFOX_REPORT_SUBDIR")
 SCHEMA_REPORT_DIR = business_knowledge_subpath("PLATFORM_SCHEMA_REPORT_SUBDIR")
 PACK_DATA_DIR = pack_data_path()
+UI_SCENE_PAGES = {
+    "/ui-scenes": "ui-scenes.html",
+    "/ui-scenes/demo": "ui-scenes-demo.html",
+}
 
 
 def _path_label(path: Path) -> str:
@@ -485,7 +489,8 @@ def _panel_navigation(handler, path):
     return (handler.command == "GET"
             and handler.headers.get("Sec-Fetch-Dest") == "document"
             and handler.headers.get("Sec-Fetch-Mode") == "navigate"
-            and (path in ("/", "/index.html", "/insights", "/insights.html") or _document_path(path)))
+            and (path in ("/", "/index.html", "/insights", "/insights.html")
+                 or path in UI_SCENE_PAGES or _document_path(path)))
 
 
 class H(BaseHTTPRequestHandler):
@@ -658,6 +663,9 @@ class H(BaseHTTPRequestHandler):
             return
         if _document_path(p.path):
             self._html((ROOT / "document.html"))
+            return
+        if p.path in UI_SCENE_PAGES:
+            self._html(ROOT / UI_SCENE_PAGES[p.path])
             return
         if p.path == "/api/whitepaper":
             document = REPO / "docs" / "architecture" / "TEST_PLATFORM_ARCHITECTURE.md"

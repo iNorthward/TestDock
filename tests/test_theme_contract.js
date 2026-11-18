@@ -61,3 +61,20 @@ test('workspace remains usable when browser storage is denied',()=>{
   state.events.pagehide();state.events.load();
   assert.equal(state.properties['--sidebar-w'],'260px');
 });
+
+test('UI scenes share a workspace tab across filters and close from a filtered URL', () => {
+  const state = workspace();
+  const base = 'http://localhost:8801/ui-scenes';
+  state.context.location = new URL(base + '?scene=A01');
+  state.context.WorkspaceShell.open(state.context.location.href, 'UI 场景选型');
+  state.context.location = new URL(base + '?page=review&scene=E10');
+  state.context.WorkspaceShell.open(state.context.location.href, 'UI 场景选型');
+  assert.equal(state.tabs.children.length, 2);
+  assert.equal(state.tabs.children[1].children[0].href, state.context.location.href);
+  assert.match(state.tabs.children[1].className, / on$/);
+  state.context.location = new URL(base + '?page=reports&scene=F06');
+  state.events.pagehide();
+  assert.equal(JSON.parse(state.values.get('testdock.workspace.tabs'))[1].url, state.context.location.href);
+  state.tabs.children[1].children[1].onclick();
+  assert.equal(state.context.location.href, 'http://localhost:8801/');
+});

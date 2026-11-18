@@ -65,6 +65,8 @@ Pack 目前只能从平台仓库内的 `packs/<id>` 装载，尚不支持外部�
 
 API 1.1 增加[请求准备与签名](docs/guides/请求准备与签名.md)、[能力采用清单](docs/guides/能力采用清单.md)和[工作台交互组件](docs/guides/工作台交互组件.md)。旧 Pack 与旧 transport 保持兼容；新生成 Pack 显式声明采用方式，验证事实初始为未执行。自定义工作台可从两个合成样例开始，继续沿用会话保护、任务与请求去重机制。
 
+新建页面或扩展现有功能时，从工作台侧栏打开「UI 场景选型」（`/ui-scenes`）。按页面类型选场景，查看组件、Pack 职责和验收步骤。可以打开「入库批次复核」完整示范，操作合成数据并查看对应选型。 [统一 UI 场景规范](docs/guides/统一UI场景规范.md)
+
 ```sh
 python3 scripts/project_doctor.py --pack demo_pack --mock-case DEMO-R01
 python3 scripts/project_tasks.py --pack sample_app init --require-real

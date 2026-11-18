@@ -163,6 +163,22 @@
         "tests/test_security_client.js"
       ]
     },
+    "ui-scenes": {
+      "sources": [
+        "test-platform/ui-scenes*.html",
+        "assets/ui-scenes*",
+        "docs/guides/统一UI场景规范.md",
+        "assets/workspace-shell.js",
+        "test-platform/document.html"
+      ],
+      "python": [
+        "test_platform_distribution_runtime"
+      ],
+      "javascript": [
+        "tests/test_ui_scenes.js",
+        "tests/test_theme_contract.js"
+      ]
+    },
     "catalog-tools": {
       "sources": [
         "scripts/validate_catalog.py",

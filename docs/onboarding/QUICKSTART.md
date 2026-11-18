@@ -36,6 +36,8 @@ PLATFORM_ENV_FILE=.env.my_service ./start.sh stop
 
 ## 维护与交付
 
+有前端页面时，可按用户任务采用平台默认交互，也可保留 Pack 自有设计。可直接复用的组件、可定制项和逐场景验收方法见[统一 UI 场景规范](../guides/统一UI场景规范.md)。
+
 ```sh
 python3 scripts/check_neutral_distribution.py
 python3 scripts/check_platform_isolation.py

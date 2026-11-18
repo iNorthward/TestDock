@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>入库批次复核示范 · TestDock</title>
+<link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml">
+<script src="/assets/theme-boot.js"></script>
+<link rel="stylesheet" href="/assets/theme-bundle.css">
+<link rel="stylesheet" href="/assets/platform-panel.css">
+<link rel="stylesheet" href="/assets/reference-workspace.css">
+<link rel="stylesheet" href="/assets/workspace-shell.css">
+<link rel="stylesheet" href="/assets/workbench-components.css">
+<link rel="stylesheet" href="/assets/ui-scenes.css">
+<script src="/assets/theme-switcher.js" defer></script>
+<script src="/assets/workspace-shell.js" defer></script>
+<script src="/assets/workbench-components.js" defer></script>
+<script src="/assets/ui-scenes-demo.js" defer></script>
+</head>
+<body class="scenes-workspace" data-workspace-title="入库批次复核示范">
+<div class="app-shell">
+<aside class="sidebar" aria-label="工作台导航">
+  <a class="brand" href="/#/home"><img src="/assets/icons/favicon.svg" alt=""><div><strong>TestDock</strong><small>测试验收平台</small></div></a>
+  <a class="nav-item active" href="/ui-scenes">UI 场景选型</a>
+</aside>
+<div class="workspace">
+<header class="topbar">
+  <div class="workspace-bar-label">已打开</div><div id="workspace-tabs" class="workspace-tabs"></div>
+  <div class="topbar-tools"><div data-theme-picker></div></div>
+</header>
+<main class="content scenes-page" id="review-demo">
+  <header class="scenes-heading">
+    <div><h1>入库批次复核示范</h1><p>选择批次、核对回单并登记复核。浏览器内模拟，使用合成样本。</p></div>
+    <a class="btn scenes-action" href="/ui-scenes?page=review&amp;scene=E10">← 查看本页选型</a>
+  </header>
+
+  <section class="scenes-panel demo-panel" aria-labelledby="batch-list-title">
+    <h2 id="batch-list-title">入库批次</h2>
+    <form id="batch-filter" class="demo-filter" role="search" aria-label="查询入库批次">
+      <div class="scenes-field"><label for="batch-search">批次号或货品</label><input id="batch-search" type="search" placeholder="如：RK-104"></div>
+      <button class="btn" type="submit">查询</button>
+    </form>
+    <p class="wb-feedback" id="batch-status"></p>
+    <div class="wb-table-scroll" tabindex="0" role="region" aria-label="入库批次表格">
+      <table aria-label="入库批次"><thead><tr><th scope="col">批次</th><th scope="col">货品</th><th scope="col">应收数量</th><th scope="col">操作</th></tr></thead><tbody id="batch-rows"></tbody></table>
+    </div>
+    <button class="btn" id="batch-more" type="button" disabled>加载更多批次</button>
+  </section>
+
+  <section class="scenes-panel demo-panel" aria-labelledby="review-title">
+    <h2 id="review-title" tabindex="-1">回单复核</h2>
+    <p id="review-batch">请先选择入库批次。</p>
+    <div class="scenes-actions"><button class="btn" id="download-template" type="button" disabled>下载回单模板</button></div>
+    <div class="demo-review-grid">
+      <div class="scenes-field">
+        <label for="receipt-sample">样本回单</label>
+        <select id="receipt-sample" disabled>
+          <option value="">请选择</option>
+          <option value="match">数量一致</option>
+          <option value="difference">数量有差异</option>
+          <option value="wrong">其他批次回单</option>
+        </select>
+      </div>
+      <div class="scenes-field">
+        <label for="receipt-file">或选择本地 JSON 回单</label>
+        <input id="receipt-file" type="file" accept=".json,application/json" aria-describedby="receipt-hint" disabled>
+        <p id="receipt-hint" class="scenes-meta">选择后只在当前浏览器读取，限 16 KB。</p>
+      </div>
+    </div>
+    <div class="scenes-actions">
+      <button class="btn" id="compare-receipt" type="button" disabled>核对回单</button>
+      <label class="demo-checkbox"><input id="lose-response" type="checkbox" disabled>模拟登记响应丢失</label>
+      <button class="btn scenes-action" id="register-review" type="button" disabled>登记复核</button>
+      <button class="btn" id="lookup-review" type="button" disabled>查询原复核</button>
+    </div>
+    <dl class="demo-result">
+      <div><dt>回单比对</dt><dd id="comparison-result">未核对</dd></div>
+      <div><dt>复核登记</dt><dd id="registration-result">未登记</dd></div>
+      <div><dt>库存入账</dt><dd>未执行</dd></div>
+    </dl>
+    <p class="wb-feedback" id="review-status" hidden></p>
+  </section>
+
+  <section class="scenes-panel demo-panel" aria-labelledby="demo-checks">
+    <h2 id="demo-checks">示范怎么验收</h2>
+    <ul class="scenes-checklist">
+      <li>选择同一批次，分别核对错批、数量差异和一致样本。只有一致时可以登记。</li>
+      <li>勾选模拟响应丢失并登记。刷新后查询原复核，检查原登记号与入账状态。</li>
+      <li>切换到另一批次，确认原批次的比对与登记结果没有跟过去。</li>
+    </ul>
+  </section>
+</main>
+</div></div>
+<dialog class="wb-dialog scenes-dialog" id="batch-details" aria-labelledby="batch-details-title">
+  <header><h2 id="batch-details-title">批次详情</h2><button class="btn" id="close-batch-details" type="button">关闭</button></header>
+  <pre id="batch-details-content"></pre>
+  <p class="wb-feedback" id="batch-details-status" hidden></p>
+</dialog>
+</body>
+</html>

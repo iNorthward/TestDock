@@ -14,23 +14,28 @@
      && !url.username && !url.password ? url.href : null;
   }catch(_){return null;}
  }
+ function tabKey(url){
+  const parsed=new URL(url);
+  return parsed.pathname==='/ui-scenes' ? parsed.origin+parsed.pathname : parsed.href;
+ }
  let tabs=[];
  try{
   const stored=JSON.parse(read('sessionStorage',key,'[]'));
   if(Array.isArray(stored))for(const item of stored){
    if(!item || typeof item.title!=='string')continue;
    const url=tabUrl(item.url);
-   if(url && !tabs.some(tab=>tab.url===url))tabs.push({url,title:item.title});
+   if(url && !tabs.some(tab=>tabKey(tab.url)===tabKey(url)))tabs.push({url,title:item.title});
   }
  }catch(_){}
  function render(){
   const root=document.getElementById('workspace-tabs');if(!root)return;
   root.replaceChildren();
   for(const tab of tabs){
-   const wrap=document.createElement('div');wrap.className='workspace-tab'+(tab.url===location.href?' on':'');
+   const current=()=>tabKey(tab.url)===tabKey(location.href);
+   const wrap=document.createElement('div');wrap.className='workspace-tab'+(current()?' on':'');
    const link=document.createElement('a');link.href=tab.url;link.textContent=tab.title;
    const close=document.createElement('button');close.className='wt-close';close.textContent='×';close.setAttribute('aria-label','关闭 '+tab.title);
-   close.onclick=()=>{tabs=tabs.filter(x=>x.url!==tab.url);save();if(tab.url===location.href)location.href=tabs.at(-1)?.url||'/#/home';};
+   close.onclick=()=>{tabs=tabs.filter(x=>x!==tab);save();if(current())location.href=tabs.at(-1)?.url||'/#/home';};
    wrap.append(link,close);root.append(wrap);
   }
  }
@@ -40,26 +45,38 @@
  }
  window.addEventListener('pagehide',()=>{
   const stored=positions();stored[location.href]=window.scrollY;write('sessionStorage',scrollKey,JSON.stringify(stored));
+  if(location.pathname==='/ui-scenes'){
+   const tab=tabs.find(item=>tabKey(item.url)===tabKey(location.href));
+   if(tab){tab.url=location.href;write('sessionStorage',key,JSON.stringify(tabs));}
+  }
  });
  window.addEventListener('load',()=>{
   const value=positions()[location.href];
+  if(location.pathname==='/ui-scenes'||location.pathname==='/ui-scenes/demo'){
+   if(Number.isFinite(value)&&value>0)window.scrollTo(0,value);
+   return;
+  }
   setTimeout(()=>window.scrollTo(0,typeof value==='number' && Number.isFinite(value) && value>=0?value:0),100);
  });
  function save(){write('sessionStorage',key,JSON.stringify(tabs));render();}
  window.WorkspaceShell={open(value,title){
   const url=tabUrl(value);if(!url || typeof title!=='string')return;
-  const tab=tabs.find(x=>x.url===url);if(tab)tab.title=title;else tabs.push({url,title});save();
+  const tab=tabs.find(x=>tabKey(x.url)===tabKey(url));if(tab)Object.assign(tab,{url,title});else tabs.push({url,title});save();
  }};
- if(location.pathname!=='/')window.WorkspaceShell.open(location.href,location.pathname==='/whitepaper'?'平台白皮书':location.pathname==='/insights'?'测试洞察':'平台文档');
+ if(location.pathname!=='/')window.WorkspaceShell.open(location.href,document.body.dataset?.workspaceTitle||
+  (location.pathname==='/whitepaper'?'平台白皮书':location.pathname==='/insights'?'测试洞察':'平台文档'));
  else window.WorkspaceShell.open(location.href,window.WorkspaceTitle||(tabs.find(x=>x.url===location.href)?.title)||(location.hash.startsWith('#/cases')?'测试用例':'测试用例总览'));
  window.addEventListener('document-loaded',event=>window.WorkspaceShell.open(location.href,event.detail));
  if(location.pathname!=='/'){
   const sidebar=document.querySelector('.sidebar');
   if(sidebar){fetch('/api/catalog?lite=1').then(r=>r.json()).then(payload=>{
-   const brand=sidebar.querySelector('.brand');sidebar.replaceChildren();if(brand)sidebar.append(brand);
+   const brand=sidebar.querySelector('.brand'),uiScenes=sidebar.querySelector('a[href="/ui-scenes"]');
+   sidebar.replaceChildren();if(brand)sidebar.append(brand);
    const addLink=(label,url)=>{const a=document.createElement('a');a.className='nav-item'+(new URL(url,location.origin).href===location.href?' active':'');a.href=url;a.textContent=label;sidebar.append(a);};
    const label=text=>{const div=document.createElement('div');div.className='nav-label';div.textContent=text;sidebar.append(div);};
-   addLink('🏠 首页','/#/home');label('测试用例 · '+(payload.data?.cases||[]).length+' 条');
+   addLink('🏠 首页','/#/home');
+   if(uiScenes)sidebar.append(uiScenes);else addLink('UI 场景选型','/ui-scenes');
+   label('测试用例 · '+(payload.data?.cases||[]).length+' 条');
    const groups=new Map();for(const suite of payload.data?.suites||[]){const name=suite.parent||'测试用例';if(!groups.has(name))groups.set(name,[]);groups.get(name).push(suite);}
    for(const [name,suites] of groups){
     const group=document.createElement('details');group.className='nav-group';group.open=read('sessionStorage','testdock.nav.'+name,'')!=='closed';
