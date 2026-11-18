@@ -4,6 +4,13 @@ class PlatformProtocolTests(unittest.TestCase):
     def test_supported_and_legacy_packs(self):
         self.assertTrue(compatibility({'platform_api':default_requirement()})['explicit'])
         self.assertFalse(compatibility({})['explicit'])
+    def test_receipt_capability_is_optional_and_explicitly_negotiated(self):
+        manifest = {'platform_api': {**default_requirement(), 'features': ['request_id', 'request_receipt_lookup']}}
+        self.assertTrue(compatibility(manifest)['compatible'])
+        with self.assertRaisesRegex(ValueError, 'request_receipt_lookup'):
+            compatibility(manifest, available_features={'request_id'})
+        self.assertTrue(compatibility({'platform_api': default_requirement()},
+                                      available_features={'request_id'})['compatible'])
     def test_invalid_and_incompatible_are_rejected(self):
         for spec in ({'min':'2.0','max_exclusive':'3.0'}, {'min':'1.0','max_exclusive':'2.0','features':['foreign']},
                      {'min':True,'max_exclusive':'2.0'}, {'min':'1.0','max_exclusive':'1.0'},

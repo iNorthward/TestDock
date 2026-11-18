@@ -26,6 +26,40 @@ class ExecutionJobsTests(unittest.TestCase):
     def create(self, **kwargs):
         return self.store.create(kind="test", **kwargs)[0]
 
+    def test_request_receipt_keeps_absent_database_absent(self):
+        missing = jobs.JobStore(self.store.path.parent / "absent" / "execution_jobs.db")
+        self.assertIsNone(missing.request_receipt("unrecorded", kind="test"))
+        self.assertFalse(missing.path.parent.exists())
+
+    def test_request_receipt_projects_state_without_touching_database(self):
+        key = "receipt"
+        job = self.create(request_key=key, fingerprint="a"*64, metadata={"private": "must-not-return"})
+        self.assertEqual(self.store.request_receipt(key, kind="test"),
+                         {"id": job["id"], "kind": "test", "status": "queued", "state": "active",
+                          "resultExpired": False})
+        self.store.finish(job["id"], status="failed", result={"private": "must-not-return"})
+        original = self.store.path.read_bytes()
+        mtime = self.store.path.stat().st_mtime_ns
+        for _ in range(2):
+            self.assertEqual(self.store.request_receipt(key, kind="test"),
+                             {"id": job["id"], "kind": "test", "status": "failed", "state": "terminal",
+                              "resultExpired": False})
+            self.assertIsNone(self.store.request_receipt(key, kind="other"))
+            self.assertIsNone(self.store.request_receipt("unrecorded", kind="test"))
+        self.assertEqual(self.store.path.read_bytes(), original)
+        self.assertEqual(self.store.path.stat().st_mtime_ns, mtime)
+
+    def test_request_receipt_is_still_available_after_expiry(self):
+        job = self.create(request_key="archived", fingerprint="b"*64)
+        self.store.finish(job["id"], status="cancelled")
+        with self.store.connection() as conn:
+            conn.execute("UPDATE execution_jobs SET updated_at=? WHERE id=?", (time.time()-8*86400, job["id"]))
+        self.assertEqual(self.store.prune(), 1)
+        self.assertEqual(self.store.request_receipt("archived", kind="test"),
+                         {"id": job["id"], "kind": "test", "state": "expired", "status": "incomplete",
+                          "resultExpired": True, "originalExecutionStatus": "cancelled"})
+        self.assertIsNone(self.store.request_receipt("archived", kind="other"))
+
     def test_isolated_stop_remains_terminal_in_synchronous_compatibility(self):
         for terminal in ('cancelled','timed_out'):
             result=jobs.run_idempotent(kind='isolated',request_id=terminal,payload={},operation=lambda:{'ok':None,'status':'incomplete','executionStatus':terminal})

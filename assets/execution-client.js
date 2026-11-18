@@ -49,13 +49,14 @@
       writeRecords(records);
     };
     const executionFetch = async function(url, init = {}) {
+      const {onExecutionRequest, ...options} = init;
       if (typeof url !== 'string' || !url.startsWith('/api/') || String(init.method).toUpperCase() !== 'POST') {
-        return original(url, init);
+        return original(url, onExecutionRequest ? options : init);
       }
       let body;
-      try { body = JSON.parse(init.body || '{}'); } catch (_) { return original(url, init); }
+      try { body = JSON.parse(init.body || '{}'); } catch (_) { return original(url, onExecutionRequest ? options : init); }
       if (!body || typeof body !== 'object' || Array.isArray(body) || body.requestId || url === '/api/execution/cancel') {
-        return original(url, init);
+        return original(url, onExecutionRequest ? options : init);
       }
       const {key, persisted} = await fingerprint(url, body);
       const records = persisted ? readRecords() : {};
@@ -63,7 +64,8 @@
       const entry = saved || {id: identify()};
       memory.set(key, entry);
       if (persisted) { records[key] = entry; writeRecords(records); }
-      const response = await original(url, {...init, headers: {...init.headers, 'Content-Type':'application/json'},
+      onExecutionRequest?.(entry.id);
+      const response = await original(url, {...options, headers: {...init.headers, 'Content-Type':'application/json'},
                                            body: JSON.stringify({...body, requestId: entry.id})});
       try {
         const payload = await response.clone().json();
@@ -79,14 +81,16 @@
       } catch (_) { /* Keep the request ID when the outcome is unknown. */ }
       return response;
     };
-    executionFetch.completeExecution = function(executionId) {
+    executionFetch.completeExecution = function(executionId, originalRequestId) {
       if (!validIdentifier(executionId)) return;
+      const matches = entry => entry.executionId === executionId ||
+        (entry.executionId === undefined && entry.id === originalRequestId);
       for (const [key, entry] of memory) {
-        if (entry.executionId === executionId) memory.delete(key);
+        if (matches(entry)) memory.delete(key);
       }
       const records = readRecords();
       for (const key of Object.keys(records)) {
-        if (records[key].executionId === executionId) delete records[key];
+        if (matches(records[key])) delete records[key];
       }
       writeRecords(records);
     };
@@ -97,6 +101,22 @@
       if (persisted) { const records = readRecords(); delete records[key]; writeRecords(records); }
     };
     return executionFetch;
+  }
+
+  async function lookupReceipt(fetcher, requestId, kind) {
+    if (!validIdentifier(requestId) || !validIdentifier(kind)) throw new TypeError('请求号或任务类型无效');
+    const query = new URLSearchParams({requestId, kind});
+    const response = await fetcher('/api/execution/receipt?' + query, {cache: 'no-store'});
+    const payload = await response.json();
+    if (response.status === 404 && payload.data?.state === 'not_found') return null;
+    const receipt = payload.data;
+    if (!response.ok || payload.ok !== true || !validIdentifier(receipt?.id) || receipt.kind !== kind ||
+        !(receipt.state === 'active' && ACTIVE.has(receipt.status) ||
+          receipt.state === 'terminal' && TERMINAL.has(receipt.status) ||
+          receipt.state === 'expired' && receipt.resultExpired === true && TERMINAL.has(receipt.originalExecutionStatus))) {
+      throw new Error(payload.error || '原请求回执查询未完成');
+    }
+    return receipt;
   }
 
   async function pollJob(fetcher, url, {onProgress = () => {}, intervalMs = 800, timeoutMs = 1500000,
@@ -122,7 +142,7 @@
     throw new Error('进度等待超时；任务可能仍在完成清理，请恢复查询');
   }
 
-  const api = {createFetch, pollJob, isActive: status => ACTIVE.has(status)};
+  const api = {createFetch, lookupReceipt, pollJob, isActive: status => ACTIVE.has(status)};
   root.PLATFORMExecution = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof window !== 'undefined') {

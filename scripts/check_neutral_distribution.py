@@ -13,7 +13,7 @@ def findings(root=ROOT):
         rel=p.relative_to(root)
         if any(part in EXCLUDED for part in rel.parts) or not p.is_file():continue
         if any(token in rel.as_posix().lower() for token in FORBIDDEN):result.append({'file':rel.as_posix(),'kind':'legacy_filename'})
-        if p.name=='.env.local' or p.name.startswith('.env.') and p.name!='.env.example':continue
+        if p.name.startswith('.env') and p.name!='.env.example':continue
         try:text=p.read_text(encoding='utf-8')
         except UnicodeError:continue
         for line_number,line in enumerate(text.splitlines(),1):
@@ -24,5 +24,9 @@ def findings(root=ROOT):
                 result.append({'file':rel.as_posix(),'kind':'broken_local_link','target':target})
     return result
 if __name__=='__main__':
-    a=argparse.ArgumentParser(description=__doc__);a.add_argument('--json',action='store_true');args=a.parse_args();items=findings()
+    a=argparse.ArgumentParser(description=__doc__);a.add_argument('--json',action='store_true')
+    a.add_argument('--root',type=Path,default=ROOT,help='检查平台产物的 platform 目录')
+    args=a.parse_args()
+    if not args.root.is_dir():a.error('检查目录不存在或不是目录')
+    items=findings(args.root.resolve())
     print(json.dumps({'ok':not items,'findings':items,'scope':'source identity keywords and documentation links only; excludes local IDE, runtime, secrets, Git metadata', 'limitations':['Keyword scan does not prove semantic neutrality or provider independence']},ensure_ascii=False,indent=2));raise SystemExit(bool(items))

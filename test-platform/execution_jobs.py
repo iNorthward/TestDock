@@ -76,6 +76,12 @@ def validate_job_id(job_id):
     return job_id
 
 
+def _validate_request_key(request_key):
+    if (not isinstance(request_key, str) or not request_key.strip()
+            or request_key != request_key.strip() or len(request_key) > 128):
+        raise ValueError("requestId 必须是 1 到 128 字符的非空标识")
+
+
 class JobStore:
     def __init__(self, path):
         self.path = Path(path)
@@ -153,9 +159,8 @@ class JobStore:
     def create(self, *, kind, metadata=None, progress=None, request_key=None, fingerprint=None, timeout_seconds=1200):
         if not isinstance(kind, str) or not kind.strip():
             raise ValueError("任务 kind 必须是非空字符串")
-        if request_key is not None and (not isinstance(request_key, str) or not request_key.strip()
-                                        or request_key != request_key.strip() or len(request_key) > 128):
-            raise ValueError("requestId 必须是 1 到 128 字符的非空标识")
+        if request_key is not None:
+            _validate_request_key(request_key)
         if type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= 86400:
             raise ValueError("任务超时必须为 0 到 86400 秒内的有限正数")
         if request_key is not None and (not isinstance(fingerprint, str) or len(fingerprint) != 64):
@@ -193,6 +198,38 @@ class JobStore:
             if row is not None:
                 return self._row(row)
             return self._expired_row(conn.execute("SELECT * FROM execution_job_tombstones WHERE id=?", (job_id,)).fetchone())
+
+    def request_receipt(self, request_key, *, kind):
+        """Read execution identity and state without opening the store for writes."""
+        _validate_request_key(request_key)
+        if not isinstance(kind, str) or not kind.strip() or kind != kind.strip() or len(kind) > 128:
+            raise ValueError("任务 kind 必须是 1 到 128 字符的非空标识")
+        if not self.path.exists():
+            return None
+        conn = sqlite3.connect(self.path.resolve().as_uri() + "?mode=ro", uri=True, timeout=5)
+        conn.row_factory = sqlite3.Row
+        try:
+            # The active row and its expiry record share one SQLite snapshot.
+            conn.execute("BEGIN")
+            tables = {row[0] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            if "execution_jobs" in tables:
+                row = conn.execute(
+                    "SELECT id, kind, status FROM execution_jobs WHERE request_key=? AND kind=?",
+                    (request_key, kind)).fetchone()
+                if row is not None:
+                    return {**dict(row), "state": "active" if row["status"] in ACTIVE else "terminal",
+                            "resultExpired": False}
+            if "execution_job_tombstones" in tables:
+                row = conn.execute(
+                    "SELECT id, kind, status FROM execution_job_tombstones WHERE request_key_hash=? AND kind=?",
+                    (hashlib.sha256(request_key.encode()).hexdigest(), kind)).fetchone()
+                if row is not None:
+                    return {"id": row["id"], "kind": row["kind"], "state": "expired", "status": "incomplete",
+                            "resultExpired": True, "originalExecutionStatus": row["status"]}
+            return None
+        finally:
+            conn.close()
 
     def start(self, job_id):
         with self.connection() as conn:

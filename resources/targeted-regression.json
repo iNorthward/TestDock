@@ -10,7 +10,9 @@
         "test-platform/history_compare.py",
         "scripts/isolated_case_worker.py",
         "test-platform/isolated_runner.py",
-        "test-platform/http_security.py"
+        "test-platform/http_security.py",
+        "examples/task_evidence/*.py",
+        "docs/guides/长任务证据配方.md"
       ],
       "python": [
         "test_execution_guard",
@@ -30,7 +32,8 @@
         "test_audit_fixes",
         "test_recheck_fixes",
         "test_execution_safety_fixes",
-        "test_execution_shutdown"
+        "test_execution_shutdown",
+        "test_task_evidence_recipe"
       ],
       "javascript": []
     },
@@ -163,6 +166,8 @@
     "catalog-tools": {
       "sources": [
         "scripts/validate_catalog.py",
+        "scripts/contract_case_impact.py",
+        "scripts/openapi_contract.py",
         "scripts/gen_apifox_coverage_wiki.py",
         "scripts/run_apifox_inspection.py",
         "scripts/migrate_api_entrypoints.py",
@@ -174,6 +179,7 @@
         "scripts/run_nightly.sh"
       ],
       "python": [
+        "test_contract_case_impact",
         "test_nightly_regression",
         "test_inspection_quality",
         "test_apifox_coverage_input_validation",
@@ -255,10 +261,17 @@
     "distribution": {
       "sources": [
         "scripts/export_platform.py",
-        "examples/demo_pack/panel.html"
+        "scripts/platform_release.py",
+        "scripts/project_upgrade.py",
+        "scripts/check_neutral_distribution.py",
+        "resources/platform-distribution-files.json",
+        "examples/demo_pack/pack.json",
+        "examples/demo_pack/panel.html",
+        "docs/guides/中性发行与升级.md"
       ],
       "python": [
         "test_platform_export",
+        "test_project_upgrade",
         "test_platform_distribution_runtime",
         "test_wire_rule_registry"
       ],

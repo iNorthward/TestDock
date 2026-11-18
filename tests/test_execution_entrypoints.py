@@ -99,3 +99,33 @@ class ExecutionEntrypointsTests(unittest.TestCase):
         cancel.do_POST()
         self.assertEqual(cancel.responses[0][1]["data"]["status"], "done")
         self.assertEqual(cancel.responses[0][1]["data"]["result"], {"ok": True})
+
+    def test_receipt_queries_preserve_the_original_execution_and_current_project(self):
+        runner = Mock(return_value={"ok": True})
+        first = execution_jobs.run_idempotent(kind="catalog-case", request_id="receipt-key", payload={}, operation=runner)
+        query = "/api/execution/receipt?requestId=receipt-key&kind=catalog-case"
+        with patch.object(execution_jobs, "get_executor", side_effect=AssertionError("read-only lookup queued a job")):
+            for path, status in ((query, 200), (query, 200), (query.replace("catalog-case", "catalog-batch"), 404),
+                                 (query.replace("receipt-key", "unknown-key"), 404), (query+"&kind=", 400),
+                                 (query.replace("receipt-key", ""), 400)):
+                with self.subTest(path=path):
+                    handler = FakePostHandler(path, {})
+                    server.H._dispatch_GET(handler)
+                    code, payload = handler.responses[0]
+                    self.assertEqual(code, status)
+                    if status == 200:
+                        self.assertEqual(payload["data"], {"id": first["executionId"], "kind": "catalog-case",
+                                                           "status": "done", "state": "terminal",
+                                                           "resultExpired": False})
+                    if status == 404:
+                        self.assertIsNone(payload["ok"])
+                        self.assertEqual(payload["status"], "incomplete")
+            other = execution_jobs.JobStore(self.store.path.with_name("independent-project.db"))
+            with patch.object(execution_jobs, "get_store", return_value=other):
+                handler = FakePostHandler(query, {})
+                server.H._dispatch_GET(handler)
+                self.assertEqual(handler.responses[0][0], 404)
+                self.assertFalse(other.path.exists())
+        runner.assert_called_once()
+        with self.store.connection() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM execution_jobs").fetchone()[0], 1)

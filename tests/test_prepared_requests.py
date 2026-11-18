@@ -8,6 +8,7 @@ import io
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 import urllib.error
 from unittest.mock import Mock, patch
@@ -408,6 +409,68 @@ class PreparedRequestTests(unittest.TestCase):
         status, body = session.get("/read", with_token=False)
         self.assertEqual(status, 400)
         self.assertTrue(body["_parse_error"])
+
+    def test_bounded_attachment_preserves_bytes_and_reads_at_most_limit_plus_one(self):
+        payload = b"\x00test"
+        session = self.session(prepared_transport=None)
+        for limit in (len(payload) - 1, len(payload), len(payload) + 1):
+            with self.subTest(limit=limit):
+                response = Response(payload, content_type="application/octet-stream")
+                response.read = Mock(wraps=response.read)
+                self.open.side_effect = lambda *args, **kwargs: response
+                status, body = session.get("/attachment", max_response_bytes=limit, with_token=False)
+                self.assertEqual(status, 200)
+                self.assertEqual(response.read.call_args_list[0].args, (limit + 1,))
+                if limit < len(payload):
+                    self.assertEqual(body, {"_parse_error": True, "_response_too_large": True,
+                                            "_max_bytes": limit, "_content_type": "application/octet-stream"})
+                    self.assertEqual(response.read.call_count, 1)
+                else:
+                    self.assertIsInstance(body, api.AttachmentResponse)
+                    self.assertEqual(body.content, payload)
+
+        self.legacy_open.side_effect = lambda *args, **kwargs: Response(b"123", content_type="application/octet-stream")
+        status, body = api.http("GET", "https://owned.invalid/attachment", {}, max_response_bytes=3)
+        self.assertEqual((status, body.content), (200, b"123"))
+        metadata = {"size": len(body.content), "sha256": hashlib.sha256(body.content).hexdigest()}
+        with tempfile.TemporaryDirectory() as directory:
+            store = execution_jobs.JobStore(Path(directory) / "jobs.db")
+            job, _ = store.create(kind="synthetic-attachment")
+            store.finish(job["id"], result={"ok": True, "metadata": metadata})
+            self.assertEqual(store.get(job["id"])["result"], {"ok": True, "metadata": metadata})
+
+    def test_bounded_response_keeps_json_errors_and_rejects_truncated_attachment(self):
+        session = self.session(prepared_transport=None)
+        self.open.side_effect = urllib.error.HTTPError(
+            "https://owned.invalid/attachment", 422, "Invalid",
+            {"Content-Type": "application/problem+json", "Content-Disposition": "attachment"},
+            io.BytesIO(b'{"invalid":false,"amount":"1.00"}'),
+        )
+        status, body = session.get("/attachment", max_response_bytes=128, with_token=False)
+        self.assertEqual((status, body), (422, {"invalid": False, "amount": "1.00"}))
+        truncated = Response(b"\x00ab", content_type="application/pdf")
+        truncated.length = 5
+        self.open.side_effect = lambda *args, **kwargs: truncated
+        status, body = session.get("/attachment", max_response_bytes=128, with_token=False)
+        self.assertEqual(status, 200)
+        self.assertTrue(body["_response_incomplete"])
+        truncated_json = Response(b'{"ok":true}', status=422)
+        truncated_json.length = 5
+        self.open.side_effect = lambda *args, **kwargs: truncated_json
+        status, body = session.get("/attachment", max_response_bytes=128, with_token=False)
+        self.assertEqual(status, 422)
+        self.assertTrue(body["_response_incomplete"])
+        self.assertNotIn("ok", body)
+
+    def test_bounded_read_requires_positive_integer_and_default_transport(self):
+        session = self.session(prepared_transport=None)
+        for limit in (True, 0, -1, 1.2, "5"):
+            with self.subTest(limit=limit), self.assertRaisesRegex(ValueError, "正整数"):
+                session.get("/attachment", max_response_bytes=limit, with_token=False)
+        with self.assertRaisesRegex(ValueError, "默认 HTTP"):
+            self.session().get("/attachment", max_response_bytes=5, with_token=False)
+        self.open.assert_not_called()
+        self.assertEqual(self.auth.builds, [])
 
     def test_legacy_json_none_and_transport_data_are_unchanged(self):
         api.http("POST", "https://owned.invalid/write", {}, data={"label": "原文", "flag": False})

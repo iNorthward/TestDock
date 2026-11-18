@@ -55,7 +55,7 @@ PLATFORM_ENV_FILE 选择环境文件，PLATFORM_PACKS 选择单个 Pack。每个
 | execution_contract_sources | 契约名称到项目路径配置键，用于执行版本指纹 |
 | execution_policy | 明确允许隔离的只读案例 ID 与执行时限，不是写操作回滚策略 |
 
-当前平台 API 1.1 声明 request_id、resource_pool、diagnostics、response_decoder、bounded_queue、history_compare、isolated_readonly、prepared_requests、capability_adoption、workbench_components。GET /api/platform 返回版本、平台支持能力、当前 Pack 兼容结果和独立的 capabilityAdoption。未声明 platform_api 的旧 Pack 暂按现有协议兼容，体检提示补显式范围；兼容和采用声明均不证明运行或业务正确。
+当前平台 API 1.1 声明 request_id、request_receipt_lookup、resource_pool、diagnostics、response_decoder、bounded_queue、history_compare、isolated_readonly、prepared_requests、bounded_attachment_response、capability_adoption、workbench_components。GET /api/platform 返回版本、平台支持能力、当前 Pack 兼容结果和独立的 capabilityAdoption。未声明 platform_api 的旧 Pack 暂按现有协议兼容，体检提示补显式范围；兼容和采用声明均不证明运行或业务正确。
 
 资源池没有必选用户、代理、管理用户、场景或夹具模型。接入者可以定义适合自身项目的分类，也可以完全关闭资源能力。分类标签不能替代业务角色授权，维护建议不能代替真实账号有效性测试。
 

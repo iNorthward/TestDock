@@ -12,6 +12,7 @@
     6. id 含 -LIVE 者 mode 必须为 live
    11. 每条用例可解析出 api（case.api 或模块 RUNNER_API[expect]），格式 "METHOD /path"
         （用例↔接口显式映射，见《用例元信息规范》§4；覆盖率据此统计）
+  16. fixtureApis 是显式的前置接口列表，与主接口独立校验
    12. D 系列 case.db.where 禁止 1=1
   规范类（warning）
     7. group 建议含系列/端侧标识（·只读/·筛选/·对账/·异常/·越权/·鉴权/LIVE 等）
@@ -39,6 +40,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+if __package__:
+    from .openapi_contract import HTTP_METHODS
+else:
+    from openapi_contract import HTTP_METHODS
+
 ROOT = Path(__file__).resolve().parents[1]
 TP = ROOT / "test-platform"
 for sub in ("common",):
@@ -52,7 +58,7 @@ VALID_COVERAGE_SERIES = {"R", "F", "D", "E"}
 FALLBACK_EXPECTS = {"preview", "reject", "live"}
 
 
-API_RE = re.compile(r"^(GET|POST|PUT|DELETE|PATCH)\s+/\S+$")
+API_RE = re.compile(r"^(" + "|".join(sorted(method.upper() for method in HTTP_METHODS)) + r")[ \t]+(/\S*)$")
 ALLOW_EMPTY_REASON_RE = re.compile(r"可空|可能无|无数据|预期空|允许为空|可为空|数据不足")
 
 INT_OR_NEG1_RE = re.compile(r"int\(\s*[^)]*\bor\s+-1\s*\)")
@@ -68,39 +74,76 @@ def load_oas_paths() -> set:
     if oas_index is None or not oas_index.exists():
         return set()
     data = json.loads(oas_index.read_text(encoding="utf-8"))
-    valid = {"get", "post", "put", "delete", "patch"}
     out = set()
     for path, methods in (data.get("paths") or {}).items():
         for method in methods:
-            if method.lower() in valid:
+            if method.lower() in HTTP_METHODS:
                 out.add((method.upper(), path))
     return out
 
 
-def case_apis(case: dict, runner_api: dict):
-    """解析用例触达的接口列表：case.api 优先，回退模块 RUNNER_API[expect]。
-
-    - 返回 None 表示无法解析（两处都未声明，或 {path} 模板缺 case.path）；
-      显式声明为空列表（无 HTTP 的用例）返回 []，不算错误。
-    - "{path}" 模板替换为 case["path"]（去掉查询串），见《用例元信息规范》§4。
-    """
+def _primary_apis(case, runner_api):
     apis = case.get("api")
     if apis is None:
         apis = (runner_api or {}).get(case.get("expect"))
-    if apis is None:
+    return [apis] if isinstance(apis, str) else apis
+
+
+def valid_contract_source(value):
+    return (isinstance(value, str) and bool(value.strip()) and value == value.strip()
+            and "=" not in value and all(ord(char) >= 32 for char in value))
+
+
+def _parse_bindings(case, values, field):
+    bindings, errors = [], []
+    if not isinstance(values, (list, tuple)):
+        return bindings, [f"{field} 须为接口列表"]
+    for index, value in enumerate(values):
+        source = None
+        if isinstance(value, dict):
+            if set(value) != {"api", "source"} or not valid_contract_source(value["source"]):
+                errors.append(f"{field}[{index}] 须声明 api 和有效的契约 source")
+                continue
+            source, value = value["source"], value["api"]
+        legacy_template = field == "api" and source is None
+        if isinstance(value, str) and ((legacy_template and "{path}" in value)
+                                      or re.fullmatch(r"\S+[ \t]+\{path\}", value)):
+            path = str(case.get("path") or "").split("?", 1)[0]
+            if not path.startswith("/"):
+                errors.append(f"{field}[{index}] 的 {{path}} 缺少可用的 case.path")
+                continue
+            value = value.replace("{path}", path)
+        match = API_RE.fullmatch(value) if isinstance(value, str) else None
+        if not match:
+            errors.append(f"{field}[{index}] 格式非法（应为 METHOD /path）")
+            continue
+        method, path = match.groups()
+        bindings.append({"method": method, "path": path, "source": source})
+    return bindings, errors
+
+
+def case_contract_bindings(case: dict, runner_api: dict):
+    """Keep missing declarations distinct from explicit empty HTTP lists."""
+    primary = _primary_apis(case, runner_api)
+    result = {}
+    for role, declared, values, field in (
+        ("primary", primary is not None, primary, "api"),
+        ("fixture", "fixtureApis" in case, case.get("fixtureApis"), "fixtureApis"),
+    ):
+        bindings, errors = _parse_bindings(case, values, field) if declared else ([], [])
+        result[role] = {"declared": declared, "bindings": bindings, "errors": errors}
+    return result
+
+
+def case_apis(case: dict, runner_api: dict):
+    """Return only primary METHOD/path values for legacy coverage consumers."""
+    primary = _primary_apis(case, runner_api)
+    if primary is None:
         return None
-    if isinstance(apis, str):
-        apis = [apis]
-    out = []
-    for a in apis:
-        a = str(a)
-        if "{path}" in a:
-            p = str(case.get("path") or "").split("?")[0]
-            if not p.startswith("/"):
-                return None
-            a = a.replace("{path}", p)
-        out.append(a)
-    return out
+    bindings, errors = _parse_bindings(case, primary, "api")
+    if errors:
+        return None
+    return [f"{binding['method']} {binding['path']}" for binding in bindings]
 
 
 def _series_of(case_id: str) -> str:
@@ -189,18 +232,19 @@ def check_structure():
                 errors.append(f"[{mod_name}] {cid} suite={sid!r} 不在模块 SUITES 中")
                 mod_errors += 1
             # 11. api 显式映射（error）；显式空列表 = 无 HTTP 用例，放行
-            apis = case_apis(c, runner_api)
-            if apis is None:
+            associations = case_contract_bindings(c, runner_api)
+            if not associations["primary"]["declared"]:
                 errors.append(f"[{mod_name}] {cid} 无法解析 api（补 case.api 或 RUNNER_API[{exp!r}]，见《用例元信息规范》§4）")
                 mod_errors += 1
-            for a in apis or []:
-                if not API_RE.match(str(a)):
-                    errors.append(f"[{mod_name}] {cid} api 格式非法：{a!r}（应为 \"METHOD /path\"）")
-                    mod_errors += 1
-                elif oas:
-                    method, path = str(a).split(" ", 1)
-                    if (method, path) not in oas:
-                        warnings.append(f"[{mod_name}] {cid} api 不在 Apifox OAS 索引：{a}")
+            for entry in associations.values():
+                errors.extend(f"[{mod_name}] {cid} {error}" for error in entry["errors"])
+                mod_errors += len(entry["errors"])
+            # The legacy index has no source identifier. Scoped bindings are
+            # checked against their declared sources by contract_case_impact.
+            for binding in associations["primary"]["bindings"]:
+                method, path = binding["method"], binding["path"]
+                if oas and binding["source"] is None and (method, path) not in oas:
+                    warnings.append(f"[{mod_name}] {cid} api 不在 Apifox OAS 索引：{method} {path}")
             # 12. D 系列 db.where 禁止 1=1（error）
             db_spec = c.get("db")
             if isinstance(db_spec, dict) and re.search(r"\b1\s*=\s*1\b", str(db_spec.get("where") or "")):

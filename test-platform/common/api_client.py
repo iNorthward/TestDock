@@ -25,6 +25,7 @@ import re
 import socket
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from http.client import IncompleteRead
 from types import MappingProxyType
 from weakref import WeakKeyDictionary
 import urllib.error
@@ -61,6 +62,21 @@ class NoPreparedRedirect(urllib.request.HTTPRedirectHandler):
 
 PREPARED_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoPreparedRedirect())
 _RAW_BODY_UNSET = object()
+_FILE_MEDIA_TYPES = frozenset({
+    "application/octet-stream",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/zip",
+    "application/pdf",
+})
+
+
+@dataclass(frozen=True)
+class AttachmentResponse:
+    """Download bytes for the current caller. Persist selected metadata separately."""
+
+    content_type: str
+    content: bytes = field(repr=False)
 
 
 class _JsonNull:
@@ -206,6 +222,15 @@ def _validate_transport(transport, prepared_transport, prepared):
         raise TypeError("prepared_transport 须实现 request_prepared")
 
 
+def _validate_response_limit(limit, transport, prepared_transport):
+    if limit is None:
+        return
+    if type(limit) is not int or limit <= 0:
+        raise ValueError("max_response_bytes 须为正整数")
+    if transport is not None or prepared_transport is not None:
+        raise ValueError("max_response_bytes 仅适用于平台默认 HTTP 传输")
+
+
 def prepare_request(method, url, headers, *, data=None, raw_body=_RAW_BODY_UNSET,
                     request_encoder=None, request_signer=None):
     """Encode once, freeze, then append signature headers without changing intent.
@@ -303,11 +328,13 @@ def http(
     request_encoder: Optional[RequestEncoder] = None,
     request_signer: Optional[RequestSigner] = None,
     prepared_transport: Optional[PreparedHttpTransport] = None,
+    max_response_bytes: Optional[int] = None,
 ):
-    """底层请求。返回 (http_status, JSON dict)；2xx 文件响应返回二进制元信息。"""
+    """Return (HTTP status, decoded value); opt in to bounded attachment bytes."""
     from execution_jobs import checkpoint
 
     checkpoint()
+    _validate_response_limit(max_response_bytes, transport, prepared_transport)
     prepared = _preparation_enabled(data, raw_body, request_encoder, request_signer, prepared_transport)
     _validate_transport(transport, prepared_transport, prepared)
     if prepared:
@@ -323,7 +350,7 @@ def http(
         if req.full_url != request.url or req.get_method() != request.method or req.data != request.body:
             raise ValueError("传输改变了准备请求")
         return _send_http(req, PREPARED_OPENER, timeout=timeout, response_decoder=response_decoder,
-                          hide_transport_details=True)
+                          max_response_bytes=max_response_bytes, hide_transport_details=True)
     validator = request_auth or _REQUEST_AUTH
     if validate_auth and validator is not None:
         validator.validate_headers(headers)
@@ -333,18 +360,21 @@ def http(
         )
     body = json.dumps(data).encode() if data is not None else None
     req = urllib.request.Request(url, data=body, headers=dict(headers), method=method)
-    return _send_http(req, OPENER, timeout=timeout, response_decoder=response_decoder)
+    return _send_http(req, OPENER, timeout=timeout, response_decoder=response_decoder,
+                      max_response_bytes=max_response_bytes)
 
 
-def _send_http(req, opener, *, timeout, response_decoder, hide_transport_details=False):
+def _send_http(req, opener, *, timeout, response_decoder, max_response_bytes, hide_transport_details=False):
     method, url = req.get_method(), req.full_url
     try:
         with opener.open(req, timeout=timeout) as r:
-            return _decode_response(r.status, r, method=method, url=url, decoder=response_decoder)
+            return _decode_response(r.status, r, method=method, url=url, decoder=response_decoder,
+                                    max_response_bytes=max_response_bytes)
     except urllib.error.HTTPError as e:
         try:
             with e:
-                return _decode_response(e.code, e, method=method, url=url, decoder=response_decoder)
+                return _decode_response(e.code, e, method=method, url=url, decoder=response_decoder,
+                                        max_response_bytes=max_response_bytes)
         except (TimeoutError, socket.timeout):
             return 0, {"_transport_error": True, "_error": "HTTP 请求超时"}
     except (TimeoutError, socket.timeout) as e:
@@ -354,11 +384,42 @@ def _send_http(req, opener, *, timeout, response_decoder, hide_transport_details
         return 0, {"_transport_error": True, "_error": detail}
 
 
-def _decode_response(status, response, *, method='', url='', decoder=None):
-    raw = response.read()
+def _read_bounded_response(response, limit):
+    buffer = bytearray()
+    while len(buffer) <= limit:
+        chunk = response.read(min(64 * 1024, limit + 1 - len(buffer)))
+        if not chunk:
+            return bytes(buffer)
+        buffer.extend(chunk)
+    return None
+
+
+def _decode_response(status, response, *, method='', url='', decoder=None, max_response_bytes=None):
     headers = getattr(response, "headers", {}) or {}
     content_type = str(headers.get("Content-Type", ""))
     content_disposition = str(headers.get("Content-Disposition", ""))
+    media_type = content_type.split(";", 1)[0].strip().lower()
+    successful = isinstance(status, int) and not isinstance(status, bool) and 200 <= status < 300
+    if max_response_bytes is None:
+        raw = response.read()
+    else:
+        try:
+            raw = _read_bounded_response(response, max_response_bytes)
+        except IncompleteRead:
+            return status, {"_parse_error": True, "_response_incomplete": True, "_content_type": content_type}
+        if raw is None:
+            return status, {"_parse_error": True, "_response_too_large": True,
+                            "_max_bytes": max_response_bytes, "_content_type": content_type}
+        has_body = method.upper() != "HEAD" and status not in (204, 205, 304)
+        # urllib's sized reads can return early on a truncated fixed-length
+        # body. A valid JSON prefix must not pass in that case either.
+        if has_body and getattr(response, "length", None) not in (None, 0):
+            return status, {"_parse_error": True, "_response_incomplete": True, "_content_type": content_type}
+        disposition = content_disposition.split(";", 1)[0].strip().lower()
+        if (successful and has_body
+                and not media_type.endswith(("/json", "+json"))
+                and (disposition == "attachment" or media_type in _FILE_MEDIA_TYPES)):
+            return status, AttachmentResponse(content_type, raw)
     try:
         decoded = raw.decode("utf-8-sig")
         strategy = decoder or _RESPONSE_DECODER
@@ -366,18 +427,8 @@ def _decode_response(status, response, *, method='', url='', decoder=None):
                  else json.loads(decoded)) if decoded.strip() else {}
         return status, value
     except (UnicodeDecodeError, json.JSONDecodeError):
-        media_type = content_type.split(";", 1)[0].strip().lower()
-        is_file = (
-            "attachment" in content_disposition.lower()
-            or media_type in {
-                "application/octet-stream",
-                "application/vnd.ms-excel",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "application/zip",
-                "application/pdf",
-            }
-        )
-        if isinstance(status, int) and not isinstance(status, bool) and 200 <= status < 300 and is_file:
+        is_file = "attachment" in content_disposition.lower() or media_type in _FILE_MEDIA_TYPES
+        if successful and is_file:
             return status, {
                 "_binary": True,
                 "_size": len(raw),
@@ -555,11 +606,13 @@ class ApiSession:
         extra_headers=None,
         allow_external=False,
         raw_body=_RAW_BODY_UNSET,
+        max_response_bytes: Optional[int] = None,
     ):
         """发请求。with_token=True 时自动 ensure_token（可用 token= 覆盖）。"""
         from execution_jobs import checkpoint
 
         checkpoint()
+        _validate_response_limit(max_response_bytes, self.transport, self.prepared_transport)
         prepared = _preparation_enabled(data, raw_body, self.request_encoder, self.request_signer, self.prepared_transport)
         _validate_transport(self.transport, self.prepared_transport,
                             prepared)
@@ -577,7 +630,7 @@ class ApiSession:
             return http(method, url, {"Content-Type": "application/json"}, data=data,
                         timeout=timeout, transport=self.transport, response_decoder=self.response_decoder,
                         validate_auth=False, raw_body=raw_body, request_encoder=self.request_encoder,
-                        prepared_transport=self.prepared_transport)
+                        prepared_transport=self.prepared_transport, max_response_bytes=max_response_bytes)
         if with_token and token is None:
             user = self.resolve_user(username)
             has_role_reference = hasattr(user, "category") and hasattr(user, "role")
@@ -603,6 +656,7 @@ class ApiSession:
             response_decoder=self.response_decoder,
             raw_body=raw_body, request_encoder=self.request_encoder,
             request_signer=self.request_signer, prepared_transport=self.prepared_transport,
+            max_response_bytes=max_response_bytes,
         )
 
     def get(self, path, **kw):

@@ -5,7 +5,7 @@ import argparse,json,keyword,re,shutil,tempfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 STARTUP_ENV_KEYS={'PLATFORM_PACKS','PLATFORM_ENV_FILE','PLATFORM_PANEL_PORT',
-                  'PLATFORM_PACK_DATA_DIR','PLATFORM_ARTIFACT_ROOT','TZ'}
+                  'PLATFORM_PACK_DATA_DIR','PLATFORM_ARTIFACT_ROOT','PLATFORM_EXPECTED_PACK','TZ'}
 def business_env_key(value):
     if not isinstance(value,str) or not re.fullmatch(r'[A-Z][A-Z0-9_]*',value):
         raise ValueError('业务环境键须为显式大写标识符')
@@ -53,11 +53,13 @@ def pack_readme(pack_id,port,contract):
                '没有确认的接口证据时保留 incomplete，不猜字段或默认账号。\n\n')
     text+=('## 独立启动与停止\n\n'
            'HTTP 项目先填写上面的配置；离线项目可直接启动。\n\n```sh\n'
-           f'PLATFORM_ENV_FILE=.env.{pack_id} ./start.sh start\n'
-           f'PLATFORM_ENV_FILE=.env.{pack_id} ./start.sh status\n'
-           f'PLATFORM_ENV_FILE=.env.{pack_id} ./start.sh stop\n'
+           f'./packs/{pack_id}/launch.sh start\n'
+           f'./packs/{pack_id}/launch.sh status\n'
+           f'./packs/{pack_id}/launch.sh stop\n'
            f'```\n\n访问 http://localhost:{port}；历史和数据在 data/{pack_id}，证据在 artifacts/{pack_id}。'
            '端口冲突时只调整自己的环境文件，不停止其他项目。\n\n'
+           '项目入口默认读取所属环境。可用 PLATFORM_ENV_FILE 指定本 Pack 的另一份配置。'
+           f'也可在平台根目录运行 `PLATFORM_ENV_FILE=.env.{pack_id} ./start.sh start`。\n\n'
            '## 后续验收\n\n'
            '本项目 tests 和 regression.json 同步维护；默认资源池与高级诊断关闭，需要时由 pack.json 显式声明。'
            '凭据、历史和数据不提交。真实 GET 仍须确认无写副作用；写用例须独立授权、开关和清理。'
@@ -118,6 +120,18 @@ def create(pack_id,name,port,*,root=ROOT,contract_file=None):
     target.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.new-pack-',dir=target.parent) as tmp:
         stage=Path(tmp)/pack_id;stage.mkdir();(stage/'cases').mkdir();(stage/'cases/__init__.py').write_text('')
+        launcher=stage/'launch.sh'
+        launcher.write_text(
+            '#!/usr/bin/env bash\n'
+            'set -euo pipefail\n'
+            'ROOT="$(cd "$(dirname "$0")/../.." && pwd)"\n'
+            'if [[ -z "${PLATFORM_ENV_FILE+x}" ]]; then\n'
+            f'  export PLATFORM_ENV_FILE=".env.{pack_id}"\n'
+            'fi\n'
+            f'PLATFORM_EXPECTED_PACK={pack_id} exec "$ROOT/start.sh" "$@"\n',
+            encoding='utf-8',
+        )
+        launcher.chmod(0o755)
         source=root/'examples/demo_pack'
         for filename in ('__init__.py','transport.py'):
             adapter=(source/filename).read_text().replace('Demo', ''.join(part.title() for part in pack_id.split('_'))).replace('x-demo-', 'x-'+pack_id.replace('_','-')+'-')
@@ -145,7 +159,7 @@ def create(pack_id,name,port,*,root=ROOT,contract_file=None):
                    "        self.assertEqual(status,404)\n"
                    "        self.assertIs(body['ok'],False)\n")
         (stage/'tests/test_adapter.py').write_text(test_code)
-        regression={'version':1,'groups':{pack_id+'.adapter':{'sources':[str(Path('packs')/pack_id/'**/*.py'),str(Path('packs')/pack_id/'pack.json')],
+        regression={'version':1,'groups':{pack_id+'.adapter':{'sources':[str(Path('packs')/pack_id/'**/*.py'),str(Path('packs')/pack_id/'pack.json'),str(Path('packs')/pack_id/'launch.sh')],
                     'python':['packs.'+pack_id+'.tests.test_adapter'],'javascript':[]}}}
         (stage/'regression.json').write_text(json.dumps(regression,ensure_ascii=False,indent=2)+'\n')
         (stage/'README.md').write_text(pack_readme(pack_id,port,contract))

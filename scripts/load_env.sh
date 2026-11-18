@@ -11,6 +11,7 @@ if [[ "$_PLATFORM_ENV_FILE" != /* ]]; then
   _PLATFORM_ENV_FILE="${_PLATFORM_REPO_ROOT}/${_PLATFORM_ENV_FILE}"
 fi
 _PLATFORM_CONFIGURED_TZ=""
+_PLATFORM_EXPECTED_PACK="${PLATFORM_EXPECTED_PACK:-}"
 
 _platform_trim() {
   local _platform_value="$1"
@@ -47,6 +48,11 @@ if [[ -f "$_PLATFORM_ENV_FILE" ]]; then
     esac
     # The selector is process-owned; a file cannot redirect later Python loads.
     [[ "$_platform_key" == "PLATFORM_ENV_FILE" ]] && continue
+    if [[ "$_platform_key" == "PLATFORM_PACKS" && -n "$_PLATFORM_EXPECTED_PACK" &&
+          "$_platform_value" != "$_PLATFORM_EXPECTED_PACK" ]]; then
+      echo "项目启动入口要求 $_PLATFORM_EXPECTED_PACK；请指定本项目的环境文件" >&2
+      return 2
+    fi
     # Match Python setdefault: explicit process values (including empty) win.
     if ! printenv "$_platform_key" >/dev/null 2>&1; then
       export "$_platform_key=$_platform_value"
@@ -63,5 +69,5 @@ if [[ -n "$_PLATFORM_CONFIGURED_TZ" && "$_PLATFORM_CONFIGURED_TZ" != "Asia/Shang
   return 1
 fi
 export TZ="Asia/Shanghai"
-unset _PLATFORM_ENV_FILE _PLATFORM_REPO_ROOT _PLATFORM_CONFIGURED_TZ _platform_line _platform_key _platform_value
+unset _PLATFORM_ENV_FILE _PLATFORM_REPO_ROOT _PLATFORM_CONFIGURED_TZ _PLATFORM_EXPECTED_PACK _platform_line _platform_key _platform_value
 unset -f _platform_trim _platform_unquote

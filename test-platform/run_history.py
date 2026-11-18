@@ -15,7 +15,7 @@ import json
 import sqlite3
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from case_result_status import normalize_case_result, summarize_cases
 from project_paths import runtime_data_path
 from identity_pool import redact_secrets
@@ -258,6 +258,41 @@ def run_detail(run_id):
         for c in cases
     ]
     return out
+
+
+def read_run_evidence(run_id):
+    """Read the selected Pack's saved case status and fingerprints without migration."""
+    run_id = validate_history_parameter(run_id, name="id", maximum=9223372036854775807)
+    if not DB_PATH.is_file():
+        return None
+    uri = DB_PATH.resolve().as_uri() + "?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True, timeout=10)) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("BEGIN")
+        run_columns = {row["name"] for row in conn.execute("PRAGMA table_info(runs)")}
+        if not run_columns:
+            return None
+        metadata_column = "metadata_json" if "metadata_json" in run_columns else "NULL AS metadata_json"
+        run = conn.execute(f"SELECT {metadata_column} FROM runs WHERE id=?", (run_id,)).fetchone()
+        if run is None:
+            return None
+        case_columns = {row["name"] for row in conn.execute("PRAGMA table_info(case_results)")}
+        status_column = "status" if "status" in case_columns else "NULL AS status"
+        cases = conn.execute(
+            f"SELECT case_id, {status_column} FROM case_results WHERE run_id=? ORDER BY id", (run_id,),
+        ).fetchall()
+    metadata = json.loads(run["metadata_json"] or "{}")
+    if not isinstance(metadata, dict):
+        raise ValueError("历史执行元数据须为对象")
+    fingerprints = metadata.get("contractFingerprints", {})
+    if not isinstance(fingerprints, dict):
+        raise ValueError("历史契约指纹须为对象")
+    return {
+        "id": run_id,
+        "packId": metadata.get("packId"),
+        "contractFingerprints": fingerprints,
+        "cases": {row["case_id"]: row["status"] for row in cases},
+    }
 
 
 def case_history(case_id, limit=20):

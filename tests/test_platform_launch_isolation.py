@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+import json
+import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -12,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / 'scripts')]
 
 from platform_config import panel_port
+from create_project_pack import create
+from export_platform import build
 
 
 class PlatformLaunchIsolationTest(unittest.TestCase):
@@ -50,6 +55,78 @@ class PlatformLaunchIsolationTest(unittest.TestCase):
                         'FIXTURE_COMMAND': f'python3 {td}/test-platform/server.py {suffix}',
                     }, capture_output=True, text=True, timeout=10, check=True)
                     self.assertEqual(result.stdout, expected)
+
+    def test_generated_launcher_default_and_explicit_environment(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            shutil.copytree(ROOT / 'examples', root / 'examples', ignore=shutil.ignore_patterns('__pycache__'))
+            launch = create('sample_launch', 'Sample', 18898, root=root) / 'launch.sh'
+            delegate = root / 'start.sh'
+            delegate.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$PLATFORM_EXPECTED_PACK" "$PLATFORM_ENV_FILE" "$1"\n')
+            delegate.chmod(0o755)
+            environment = {'PATH': os.environ['PATH']}
+            for setup, expected in [('unset PLATFORM_ENV_FILE', '.env.sample_launch'),
+                                    ('export PLATFORM_ENV_FILE=.env.sample_review', '.env.sample_review')]:
+                for command in ('start', 'status', 'stop'):
+                    with self.subTest(setup=setup, command=command):
+                        result = subprocess.run(
+                            ['bash', '-c', setup + '\nexec "$@"', 'launcher-test', str(launch), command],
+                            cwd=td, env=environment, check=True, capture_output=True, text=True, timeout=15,
+                        )
+                        self.assertEqual(result.stdout.splitlines(), ['sample_launch', expected, command])
+
+    @unittest.skipIf(os.environ.get('PLATFORM_OFFLINE_CONTEXT'), '单独运行自有回环启动验收')
+    def test_two_generated_launchers_stop_only_their_own_panel(self):
+        with tempfile.TemporaryDirectory() as td:
+            temp = Path(td)
+            root = build(temp / 'release') / 'platform'
+            with socket.socket() as first, socket.socket() as second:
+                for probe in (first, second):
+                    probe.bind(('127.0.0.1', 0))
+                ports = [probe.getsockname()[1] for probe in (first, second)]
+            for pack, port in zip(('sample_launch_a', 'sample_launch_b'), ports):
+                create(pack, pack, port, root=root)
+
+            environment = {'PATH': os.environ['PATH'], 'PYTHONDONTWRITEBYTECODE': '1'}
+
+            def launch(pack, command, *, selected=None, environment_pack=None):
+                env = dict(environment)
+                if selected is not None:
+                    env['PLATFORM_ENV_FILE'] = selected
+                if environment_pack is not None:
+                    env['PLATFORM_PACKS'] = environment_pack
+                return subprocess.run([str(root / 'packs' / pack / 'launch.sh'), command], cwd=temp, env=env,
+                                      capture_output=True, text=True, timeout=30)
+
+            def get_platform(port):
+                with subprocess.Popen(['curl', '-fsS', '--noproxy', '*', '--max-time', '5',
+                                       f'http://127.0.0.1:{port}/api/session'],
+                                      env=environment, stdout=subprocess.PIPE, text=True) as process:
+                    token = json.load(process.stdout)['token']
+                output = subprocess.check_output(
+                    ['curl', '-fsS', '--noproxy', '*', '--max-time', '5', '-H', 'X-TestDock-Token: ' + token,
+                     f'http://127.0.0.1:{port}/api/platform'], env=environment, text=True,
+                )
+                return json.loads(output)['data']['pack']
+
+            try:
+                for pack, port in zip(('sample_launch_a', 'sample_launch_b'), ports):
+                    started = launch(pack, 'start')
+                    self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+                    self.assertEqual(get_platform(port), pack)
+                    self.assertIn('运行中', launch(pack, 'status').stdout)
+                for environment_pack in (None, 'sample_launch_a'):
+                    rejected = launch('sample_launch_a', 'stop', selected='.env.sample_launch_b',
+                                      environment_pack=environment_pack)
+                    self.assertEqual(rejected.returncode, 2, rejected.stdout + rejected.stderr)
+                self.assertEqual(launch('sample_launch_a', 'stop').returncode, 0)
+                self.assertIn('未运行', launch('sample_launch_a', 'status').stdout)
+                self.assertEqual(get_platform(ports[1]), 'sample_launch_b')
+                self.assertIn('运行中', launch('sample_launch_b', 'status', selected='.env.sample_launch_b').stdout)
+            finally:
+                cleanup = [launch(pack, 'stop') for pack in ('sample_launch_a', 'sample_launch_b')]
+                for stopped in cleanup:
+                    self.assertEqual(stopped.returncode, 0, stopped.stdout + stopped.stderr)
 
 
 if __name__ == '__main__':

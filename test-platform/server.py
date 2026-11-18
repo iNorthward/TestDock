@@ -476,6 +476,18 @@ class PanelHTTPServer(ThreadingHTTPServer):
             self._shutdown_thread.join()
 
 
+def _document_path(path):
+    return (path == "/whitepaper" or
+            (unquote(path).endswith(".md") and path.startswith(("/docs/", "/examples/adapter_recipes/"))))
+
+
+def _panel_navigation(handler, path):
+    return (handler.command == "GET"
+            and handler.headers.get("Sec-Fetch-Dest") == "document"
+            and handler.headers.get("Sec-Fetch-Mode") == "navigate"
+            and (path in ("/", "/index.html", "/insights", "/insights.html") or _document_path(path)))
+
+
 class H(BaseHTTPRequestHandler):
     io_timeout_seconds = 10
 
@@ -487,7 +499,7 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, format_string, *args):
         # Do not log query strings, headers, credentials or request bodies.
         logging.getLogger(__name__).info("request=%s method=%s status=%s",
-                                         getattr(self, "request_id", "-"), self.command,
+                                         getattr(self, "request_id", "-"), getattr(self, "command", "-"),
                                          args[1] if len(args) > 1 else "-")
 
     def _authorize(self, *, mutation=False):
@@ -496,7 +508,8 @@ class H(BaseHTTPRequestHandler):
         try:
             authorize(self.headers, port=self.server.server_port,
                       token=self.server.session_token, api=path.startswith("/api/"),
-                      session=path == "/api/session", mutation=mutation)
+                      session=path == "/api/session", mutation=mutation,
+                      panel_navigation=not mutation and _panel_navigation(self, path))
         except RequestRejected as exc:
             self.close_connection = True
             self._json(exc.status, {"ok": False, "error": str(exc)})
@@ -602,6 +615,17 @@ class H(BaseHTTPRequestHandler):
         if not self._authorize():
             return
         try:
+            target = urlparse(self.path)
+            port = self.server.server_port
+            if (not (target.scheme or target.netloc or target.fragment)
+                    and _panel_navigation(self, target.path)
+                    and self.headers.get("Host", "").lower() == f"127.0.0.1:{port}"):
+                self.send_response(307)
+                self.send_header("Location", f"http://localhost:{port}{self.path}")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             self._dispatch_GET()
         except (BrokenPipeError, ConnectionResetError):
             logging.getLogger(__name__).info("request=%s disconnected", self.request_id)
@@ -632,7 +656,7 @@ class H(BaseHTTPRequestHandler):
             except OSError:
                 self._json(404, {"ok": False, "error": "文档不存在或不可读"})
             return
-        if p.path == "/whitepaper" or (unquote(p.path).endswith(".md") and p.path.startswith(("/docs/", "/examples/adapter_recipes/"))):
+        if _document_path(p.path):
             self._html((ROOT / "document.html"))
             return
         if p.path == "/api/whitepaper":
@@ -660,6 +684,20 @@ class H(BaseHTTPRequestHandler):
             return
         if p.path == "/api/execution/queue":
             self._json(200, {'ok':True,'data':jobs.get_executor().snapshot()})
+            return
+        if p.path == "/api/execution/receipt":
+            try:
+                identity = parse_qs(p.query, keep_blank_values=True)
+                if set(identity) != {"requestId", "kind"} or any(len(values) != 1 for values in identity.values()):
+                    raise ValueError("请各提供一个 requestId 和任务 kind")
+                receipt = jobs.get_store().request_receipt(identity["requestId"][0], kind=identity["kind"][0])
+                if receipt is None:
+                    self._json(404, {"ok": None, "status": "incomplete", "data": {"state": "not_found"},
+                                     "error": "未找到原请求回执；业务结果仍待确认"})
+                else:
+                    self._json(200, {"ok": True, "data": receipt})
+            except ValueError as exc:
+                self._json(400, {"ok": False, "error": str(exc)})
             return
         if p.path == "/api/execution/job":
             try:

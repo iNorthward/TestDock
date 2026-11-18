@@ -15,10 +15,15 @@ for dependency in python3 lsof curl ps seq; do
     exit 2
   fi
 done
+EXPECTED_PACK="${PLATFORM_EXPECTED_PACK:-}"
 source "$ROOT/scripts/load_env.sh"
 
 LAUNCH_CONFIG="$(python3 "$ROOT/scripts/platform_launch_config.py")"
 read -r PACK_ID TEST_PORT <<< "$LAUNCH_CONFIG"
+if [[ -n "$EXPECTED_PACK" && "$PACK_ID" != "$EXPECTED_PACK" ]]; then
+  echo "项目启动入口要求 $EXPECTED_PACK，当前环境选择 $PACK_ID；请指定本项目的环境文件" >&2
+  exit 2
+fi
 RUN_DIR="$(python3 "$ROOT/scripts/platform_launch_config.py" --run-dir)"
 mkdir -p "$RUN_DIR"
 

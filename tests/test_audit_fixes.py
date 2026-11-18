@@ -197,12 +197,14 @@ class RealPanelHTTPTests(unittest.TestCase):
         self.addCleanup(self.httpd.server_close);self.addCleanup(self.httpd.shutdown)
         self.token=self.httpd.session_token
 
-    def request(self,path,method='GET',body=None,headers=None):
+    def request(self,path,method='GET',body=None,headers=None,*,with_headers=False):
         connection=http.client.HTTPConnection('127.0.0.1',self.httpd.server_port,timeout=3)
         self.addCleanup(connection.close)
         base={'X-TestDock-Token':self.token,'Content-Type':'application/json'}
         connection.request(method,path,body=body,headers={**base,**(headers or {})})
         response=connection.getresponse();raw=response.read()
+        if with_headers:
+            return response.status, raw, dict(response.getheaders())
         return response.status,raw
 
     def test_http_attack_requests_never_reach_runner(self):
@@ -231,6 +233,34 @@ class RealPanelHTTPTests(unittest.TestCase):
         with patch.object(server,'_run_panel_request',return_value={'status':'passed'}) as run:
             self.assertEqual(self.request('/api/run-case','POST','{"id":"DEMO-R01"}')[0],200)
             run.assert_called_once()
+
+    def test_only_top_level_panel_documents_use_canonical_loopback_navigation(self):
+        address = "127.0.0.1:"+str(self.httpd.server_port)
+        canonical = "localhost:"+str(self.httpd.server_port)
+        page_headers = {"Sec-Fetch-Dest": "document", "Sec-Fetch-Mode": "navigate"}
+        for path in ("/", "/index.html?scope=owned%20scope", "/insights?tab=history"):
+            with self.subTest(path=path):
+                status, page, headers = self.request(path, headers=page_headers, with_headers=True)
+                self.assertEqual(status, 307)
+                self.assertEqual(headers["Location"], "http://"+canonical+path)
+                self.assertEqual(page, b"")
+        status, page, headers = self.request("/index.html?scope=owned",
+                                             headers={**page_headers, "Host": canonical,
+                                                      "Sec-Fetch-Site": "cross-site",
+                                                      "Referer": "http://"+address+"/"}, with_headers=True)
+        self.assertEqual(status, 200)
+        self.assertNotIn("Location", headers)
+        self.assertIn(b"/assets/security-client.js", page)
+        for path, headers in (("/api/platform", page_headers),
+                              ("/api/session", page_headers),
+                              ("/assets/execution-client.js", page_headers),
+                              ("/", {**page_headers, "Sec-Fetch-Dest": "iframe"})):
+            with self.subTest(path=path, headers=headers):
+                status, _, response_headers = self.request(path, headers=headers, with_headers=True)
+                self.assertEqual(status, 200)
+                self.assertNotIn("Location", response_headers)
+        self.assertEqual(self.request("/api/execution/receipt", headers={
+            **page_headers, "X-TestDock-Token": ""})[0], 403)
 
     def test_get_mutations_bad_history_and_invalid_mode_are_rejected(self):
         with patch.object(server,'reload_catalog_registry') as reload:

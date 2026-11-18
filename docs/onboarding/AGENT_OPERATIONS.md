@@ -35,21 +35,36 @@ python3 scripts/project_tasks.py --pack my_app record --task adapter --evidence 
 
 生成器声明 `platform_api`：`{"min":"1.1","max_exclusive":"2.0","features":["request_id","capability_adoption"]}`。Core 在 bootstrap 前验证范围、字段类型、重复及所需能力；不兼容时拒绝装载。旧 Pack 未声明时按现有协议兼容，但体检会提示补显式约束。GET /api/platform 返回当前版本、支持能力与当前 Pack 兼容结果。升级先体检与定向回归，再启动独立验收进程，不直接替换运行中的业务配置。
 
+生成 Pack 后可以用其独立启动入口操作当前项目。独立副本升级前可以比较原始发行、当前副本和目标发行，再审核文件冲突和必需能力。具体命令和中性发行来源见[中性发行与升级](../guides/中性发行与升级.md)。
+
 ## 执行队列和卡死隔离
 
 进程内默认最多 2 个执行，后台最多排队 32 个。可在该项目环境配置 PLATFORM_EXECUTION_WORKERS=1–16 与 PLATFORM_EXECUTION_QUEUE_LIMIT=1–1000，修改后重启。后台任务 FIFO，同步兼容入口也受相同执行上限控制；满额时明确 incomplete，操作尚未开始，不自动重放。GET /api/execution/queue 查询进程内运行及排队数；不宣称跨主机全局并发控制。
 
 工作台使用 background=true 提交持久任务并轮询。API 接入者可用相同参数；返回 pending 时按 executionId 查询任务，不重复提交。排队取消释放队列容量，运行中取消先让 Pack 清理。保留 requestId 的去重规则；失败或满额任务核验后使用新的标识重试。
 
+首个提交响应丢失时，可凭原请求号查询 `GET /api/execution/receipt?requestId=…&kind=catalog-case`。用例批次的 kind 为 `catalog-batch`。该接口使用当前 Pack 的面板会话，仅返回任务身份、状态和过期信息。查到执行 ID 后按原任务继续查询。没有查到时保留请求号和待核验状态。需要约束新平台能力的 Pack 可声明 `request_receipt_lookup`。
+
 取消或超时后的批次仍保存已完成案例与未完成范围，历史不会把部分通过当作整次通过。SAFE 批次含写入标记时也需面板写入确认，不能仅按 SAFE 标签判断没有副作用。结果正文归档后返回 `resultExpired=true` 与核验提示，同 requestId 仍不会重放；不要删除任务数据库来清理历史，否则去重摘要也会丢失。
 
 停止/重启先协作取消并等待已有任务和恢复结束。脚本等待窗口耗尽时返回非零并保留原服务，不自动强杀；待清理完成后重试。临时清理故障修复后可再次请求停止。没有控制检查或恢复契约的业务写操作仍不能保证在有限时间内结束。
+
+要验收轮次证据、回复未知后的接续决策及清理凭据，可先运行[长任务证据配方](../guides/长任务证据配方.md)。
 
 只读 Pack 可在 `execution_policy` 声明 `isolated_case_ids` 和 `case_timeout_seconds`（有限正数，最多 3600）。只有显式列入的 SAFE、无写入开关案例才能在独立进程执行；父进程监控时限和取消并终止其进程组。当前进程组终止验收环境为 macOS/POSIX；Windows 的后代进程树终止尚未验证，接入者不得沿用本轮结论。示例：`{"isolated_case_ids":["OFFLINE-R01"],"case_timeout_seconds":30}`。先验证该案例实际只读；GET 标签本身不能证明无副作用。写操作保持协作取消与项目恢复，不能通过强杀冒充回滚。进程隔离不等于运行不受信任 Pack 的安全沙箱。
 
 ## 历史结果与契约比较
 
 历史页在至少两条记录时提供执行对比。也可 GET /api/history/compare?before=1&after=2。它比较增删案例、状态、子断言差异、代码与契约指纹，不重新执行。历史无指纹时明确标注证据缺失；跨 Pack 版本证据不允许混比。契约漂移提示同期变化，不证明它就是失败原因。
+
+用例的主要接口沿用 `case.api` 或 `RUNNER_API`，可用 `fixtureApis` 声明前置接口。多个契约来源时，可按 `{"api":"GET /items/{id}","source":"service"}` 标明归属。在当前 Pack 下用两份已审阅快照生成复验清单：
+
+```sh
+PLATFORM_ENV_FILE=.env.my_app python3 scripts/contract_case_impact.py \
+  --before service=old.json --after service=new.json
+```
+
+需要对照一条已有运行时增加 `--history-run 42`。输出列出关联角色、版本摘要、受影响案例及待核对项。原运行结果保留在对应版本，新契约下的受影响案例标为待复验。来源或关联无法确认时先核对 Pack 声明。
 
 ## 真实验收与恢复
 

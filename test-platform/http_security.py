@@ -13,18 +13,21 @@ class RequestRejected(ValueError):
         self.status = status
 
 
-def authorize(headers, *, port, token, api=False, session=False, mutation=False):
+def authorize(headers, *, port, token, api=False, session=False, mutation=False, panel_navigation=False):
     if hasattr(headers, 'get_all'):
         for name in ('Host','Origin','Referer','Sec-Fetch-Site','X-TestDock-Token',
-                     'Content-Type','Content-Length','Transfer-Encoding'):
+                     'Sec-Fetch-Dest','Sec-Fetch-Mode','Content-Type','Content-Length','Transfer-Encoding'):
             if len(headers.get_all(name, [])) > 1:
                 raise RequestRejected(400, "请求保护头不得重复")
     authorities = {f"127.0.0.1:{port}", f"localhost:{port}"}
     host = headers.get("Host", "").lower()
     if host not in authorities:
         raise RequestRejected(403, "Host 不允许访问")
-    if headers.get("Sec-Fetch-Site") in ("cross-site", "same-site"):
-        raise RequestRejected(403, "仅允许同源访问")
+    panel_navigation = (panel_navigation and not api and not session and not mutation
+                        and headers.get("Sec-Fetch-Dest") == "document"
+                        and headers.get("Sec-Fetch-Mode") == "navigate")
+    allowed_sources = authorities if panel_navigation else {host}
+    has_source = False
     for name in ("Origin", "Referer"):
         raw = headers.get(name)
         if raw is not None:
@@ -34,9 +37,13 @@ def authorize(headers, *, port, token, api=False, session=False, mutation=False)
                 parsed = urlsplit(raw)
             except ValueError as exc:
                 raise RequestRejected(403, "来源 URL 无效") from exc
-            if (parsed.scheme != "http" or parsed.netloc.lower() != host
+            if (parsed.scheme != "http" or parsed.netloc.lower() not in allowed_sources
                     or parsed.username is not None or parsed.password is not None):
                 raise RequestRejected(403, "仅允许同源访问")
+            has_source = True
+    # Browser fetch metadata may retain the whole redirect chain's site relationship.
+    if headers.get("Sec-Fetch-Site") in ("cross-site", "same-site") and not (panel_navigation and has_source):
+        raise RequestRejected(403, "仅允许同源访问")
     if api and not session:
         supplied = headers.get("X-TestDock-Token", "")
         if not secrets.compare_digest(supplied.encode(), token.encode()):

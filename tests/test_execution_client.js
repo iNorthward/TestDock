@@ -8,10 +8,10 @@ const api = require('../assets/execution-client.js');
 
 function storage() {
   const records = new Map();
-  return {records, getItem: key => records.get(key), setItem: (key,value) => records.set(key,value)};
+  return {records, getItem: key => records.get(key), setItem: (key,value) => records.set(key,value), removeItem: key => records.delete(key)};
 }
 function response(payload, status=200) {
-  return {status, json: async () => payload, clone: () => ({json: async () => payload})};
+  return {status, ok: status >= 200 && status < 300, json: async () => payload, clone: () => ({json: async () => payload})};
 }
 
 test('unknown network result reuses one request ID across reload without storing credentials', async () => {
@@ -149,6 +149,58 @@ const panel = fs.readFileSync(path.join(__dirname, '../test-platform/panel.html'
 const cleanup = panel.match(/await fetch\.completeExecution\?\.[^\n]+/)[0];
 const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
 const finishFromPanel = new AsyncFunction('fetch', 'current', cleanup);
+
+for (const delivered of [true, false]) {
+  test(`workbench refresh queries original request after the first response is lost (delivered: ${delivered})`, async () => {
+    const saved = storage(), calls = [], texts = {}, buttons = new Map();
+    const body = {id: 'SYNTHETIC-R01', background:true};
+    const original = async (url, init) => {
+      assert.equal(init.onExecutionRequest, undefined);
+      calls.push([url, init.method || 'GET']);
+      if (init.method === 'POST') {
+        assert.equal(JSON.parse(init.body).requestId, 'original-request');
+        throw new Error('submission acknowledgement lost');
+      }
+      if (url === '/api/execution/receipt?requestId=original-request&kind=catalog-case') {
+        return delivered
+          ? response({ok: true, data:{id:'original-job', kind:'catalog-case', state:'terminal', status:'done', resultExpired:false}})
+          : response({ok: null, status:'incomplete', data:{state:'not_found'}}, 404);
+      }
+      assert.equal(url, '/api/execution/job?id=original-job');
+      return response({ok:true, data:{status:'done', result:{ok:true, status:'passed'}}});
+    };
+    const base = {
+      PLATFORMExecution: api, watching:false, packId:'synthetic', activeRun:null, sessionStorage:saved,
+      setText: (name, value) => { texts[name] = value; },
+      $: id => { if (!buttons.has(id)) buttons.set(id, {}); return buttons.get(id); },
+      showStatus(){}, renderCases(){}, renderResult(){}
+    };
+    const start = api.createFetch(original, {storage:saved, identify:() => 'original-request'});
+    const source = panel.slice(panel.indexOf('function activeStorageKey()'), panel.indexOf("$('only-failed').onclick"));
+    const first = vm.createContext({...base, api: async (url, init) => (await (await start(url, init)).json()).data});
+    vm.runInContext(source, first);
+    await first.submitActiveRun('/api/run-case', body, {caseId: body.id});
+    assert.equal(texts['result-status'], '提交结果未确认');
+    assert.equal(first.activeRun.requestId, 'original-request');
+    assert.equal(first.activeRun.jobId, undefined);
+    const restored = vm.createContext({...base, fetch:api.createFetch(original, {storage:saved})});
+    vm.runInContext(source, restored);
+    restored.restoreActiveJob();
+    assert.equal(calls.length, 1);
+    await restored.watchActiveJob();
+    assert.equal(calls.filter(([, method]) => method === 'POST').length, 1);
+    assert.equal(texts['result-status'], delivered ? '通过' : '业务结果待确认');
+    assert.equal(calls.length, delivered ? 3 : 2);
+    if (delivered) {
+      assert.equal(restored.activeRun, null);
+      assert.doesNotMatch([...saved.records.values()].join(''), /original-request/);
+    } else {
+      assert.equal(restored.activeRun.requestId, 'original-request');
+      assert.equal(buttons.get('job-release').hidden, false);
+      assert.match([...saved.records.values()].join(''), /original-request/);
+    }
+  });
+}
 
 for (const batch of [false, true]) {
   test(`panel terminal acknowledgement releases a LIVE ${batch ? 'batch' : 'case'} after reload`, async () => {

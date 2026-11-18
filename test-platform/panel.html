@@ -46,7 +46,7 @@
 
 <div class="case-filter"><input id="filter" type="search" placeholder="搜索用例 ID / 描述 / 参数" aria-label="筛选用例"><button class="chip" id="only-failed">仅失败</button></div>
 <div class="tw"><table class="case-table"><thead><tr><th>用例</th><th>子类</th><th>描述</th><th>参数</th><th>预期</th><th>执行</th><th>结果</th></tr></thead><tbody id="cases" aria-live="polite"></tbody></table></div>
-<section class="panel result-panel" aria-labelledby="result-title"><div class="panel-header"><div class="panel-title" id="result-title">执行结果</div><div><button id="job-resume" class="btn small" type="button" hidden>恢复查询</button> <button id="job-cancel" class="btn small" type="button" hidden>取消任务</button> <span id="result-status" class="tag">等待执行</span></div></div><div id="result-summary" class="result-summary"></div><pre class="result-content" id="result" tabindex="0" aria-live="polite">选择一个 SAFE 用例，执行结果将在这里显示。</pre></section>
+<section class="panel result-panel" aria-labelledby="result-title"><div class="panel-header"><div class="panel-title" id="result-title">执行结果</div><div><button id="job-resume" class="btn small" type="button" hidden>恢复查询</button> <button id="job-release" class="btn small" type="button" hidden>已核验，解除等待</button> <button id="job-cancel" class="btn small" type="button" hidden>取消任务</button> <span id="result-status" class="tag">等待执行</span></div></div><div id="result-summary" class="result-summary"></div><pre class="result-content" id="result" tabindex="0" aria-live="polite">选择一个 SAFE 用例，执行结果将在这里显示。</pre></section>
 </section>
 <section id="resource-view" class="panel" hidden><div class="panel-header"><div><div class="panel-title" id="resource-title">项目资源</div><div class="panel-subtitle" id="resource-description"></div></div><button id="identity-reload" class="btn small" type="button">刷新资源</button></div><div id="identity-categories" class="resources" aria-live="polite"></div><div id="resource-maintenance" class="maintenance"></div></section>
 <div class="status-bar" id="status" role="status"><span id="status-text">正在加载工作区…</span><span>测试平台</span></div>
@@ -58,7 +58,15 @@ let allCases = [], resourceDefinition = {enabled:false}, currentView = 'home', a
 let suites=[],selectedSuite='',selectedSeries='all',onlyFailed=false,loadedSuite=null;const caseResults=new Map();
 let catalogRevision=null,revisionChecking=false;
 const setText = (id, value) => { $(id).textContent = value; };
-async function api(path, options) { const reply=await fetch(path, options); const payload=await reply.json(); if (!reply.ok || !payload.ok) throw new Error(payload.error || '请求失败'); return payload.data; }
+async function api(path, options) {
+ const reply=await fetch(path, options), payload=await reply.json();
+ if (!reply.ok || !payload.ok) {
+  const error=new Error(payload.error || '请求失败');
+  error.requestRejected=reply.status<500&&payload.ok===false;
+  throw error;
+ }
+ return payload.data;
+}
 function showStatus(text, error=false){setText('group-status',text);setText('status-text',text);$('status').classList.toggle('error',error);}
 function view(name) {
  if(name==='resources'&&!resourceDefinition.enabled)return;
@@ -112,7 +120,7 @@ function renderCases(){
  if(!visible.length){const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=7;cell.className='empty-state';cell.textContent=inSuite.length?'没有符合当前筛选条件的用例。':'当前分组没有用例。';row.append(cell);root.append(row);}
 }
 async function loadCatalog(){
- try{const data=await api('/api/catalog?lite=1',{cache:'no-store'});allCases=data.cases||[];suites=data.suites||[];packId=data.packs?.[0]?.id||packId;try{for(const [id,result] of JSON.parse(sessionStorage.getItem('testdock.results.'+packId)||'[]'))caseResults.set(id,result);}catch(_){}renderNavigation();readRoute();
+ try{const data=await api('/api/catalog?lite=1',{cache:'no-store'});allCases=data.cases||[];suites=data.suites||[];packId=data.packs?.[0]?.id||packId;restoreActiveJob();try{for(const [id,result] of JSON.parse(sessionStorage.getItem('testdock.results.'+packId)||'[]'))caseResults.set(id,result);}catch(_){}renderNavigation();readRoute();
  catalogRevision=data.catalogRevision;
  setText('pack-badge',(data.packs||[]).map(p=>p.name).join(' · ')||'未选择项目');
  setText('total-cases',allCases.length);setText('safe-cases',allCases.filter(c=>c.mode!=='live'&&!c.regressionExcluded).length);setText('total-suites',new Set(allCases.map(c=>c.suite)).size);renderCases();showStatus('目录已更新 · '+allCases.length+' 个用例');
@@ -162,26 +170,44 @@ function activeStorageKey(){return 'platform.activeReadonlyJob.'+packId;}
 function saveActiveJob(){try{if(activeRun)sessionStorage.setItem(activeStorageKey(),JSON.stringify(activeRun));else sessionStorage.removeItem(activeStorageKey());}catch(_) {}}
 function restoreActiveJob(){
  if(activeRun||!packId)return;
- try{const saved=JSON.parse(sessionStorage.getItem(activeStorageKey())||'null');if(saved&&typeof saved.jobId==='string'&&typeof saved.caseId==='string'){activeRun=saved;$('job-resume').hidden=false;$('job-cancel').hidden=false;setText('result-status','待恢复查询');setText('result','发现未确认终态的任务，请恢复查询。任务 '+saved.jobId);renderCases();}}catch(_) {}
+ try{
+  const saved=JSON.parse(sessionStorage.getItem(activeStorageKey())||'null');
+  if(saved&&typeof saved.caseId==='string'&&(typeof saved.jobId==='string'||typeof saved.requestId==='string')){
+   activeRun=saved;$('job-resume').hidden=false;$('job-cancel').hidden=!saved.jobId;
+   setText('result-status','待恢复查询');
+   setText('result','发现未确认终态的操作，请恢复查询。'+(saved.jobId?'任务 '+saved.jobId:'请求 '+saved.requestId));
+   renderCases();
+  }
+ }catch(_) {}
 }
 async function watchActiveJob(){
- if(!activeRun||watching)return;watching=true;$('job-resume').hidden=true;$('job-cancel').hidden=false;renderCases();
- const current=activeRun;
+ if(!activeRun||watching)return;
+ const current=activeRun;watching=true;$('job-resume').hidden=true;$('job-release').hidden=true;$('job-cancel').hidden=!current.jobId;renderCases();
  try{
+  if(!current.jobId){
+   const receipt=await PLATFORMExecution.lookupReceipt(fetch,current.requestId,current.batch?'catalog-batch':'catalog-case');
+   if(!receipt){
+    setText('result-status','业务结果待确认');
+    setText('result','暂未找到原请求回执。请求 '+current.requestId+'，请继续查询或先核验业务状态。');
+    $('job-resume').hidden=false;$('job-release').hidden=false;
+    return;
+   }
+   current.jobId=receipt.id;saveActiveJob();$('job-cancel').hidden=receipt.state!=='active';
+  }
   const job=await PLATFORMExecution.pollJob(fetch,'/api/execution/job?id='+encodeURIComponent(current.jobId),{onProgress:j=>setText('result-status',j.status)});
   const data=job.resultExpired===true?{ok:null,status:'incomplete',resultExpired:true,error:job.error||'执行结果已过期，请核验业务状态后再决定是否重新执行。'}:job.result||{ok:null,status:job.status,error:job.error};
   setText('result-status',data.status==='passed'?'通过':data.executionStatus||data.status||job.status);setText('result',JSON.stringify(data,null,2));renderResult(data);showStatus(job.resultExpired===true?'执行结果已过期 · 请先核验业务状态':'执行已结束 · '+current.caseId,job.resultExpired===true);
-  await fetch.completeExecution?.(current.jobId);
+  await fetch.completeExecution?.(current.jobId,current.requestId);
   activeRun=null;saveActiveJob();$('job-cancel').hidden=true;
- }catch(error){setText('result-status','查询未完成');setText('result',error.message+' · 任务 '+current.jobId);showStatus(error.message,true);$('job-resume').hidden=false;}
+ }catch(error){setText('result-status','查询未完成');setText('result',error.message+(current.jobId?' · 任务 '+current.jobId:' · 请求 '+current.requestId));showStatus(error.message,true);$('job-resume').hidden=false;}
  finally{watching=false;renderCases();}
 }
 async function runCase(item,button){
- if(activeRun||watching)return;const requiresLive=TestDockSecurity.requiresLiveConfirmation(item);if(requiresLive&&!confirm('此用例将写入当前项目测试环境。确认执行 '+item.id+'？'))return;button.disabled=true;watching=true;renderCases();setText('result-status','提交中');setText('result','正在提交 '+item.id+'…');
- try{
-  const data=await api('/api/run-case',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,background:true,...(requiresLive?{confirmLive:item.id}:{})})});
-  activeRun={jobId:data.executionId,caseId:item.id};saveActiveJob();watching=false;await watchActiveJob();
- }catch(error){watching=false;setText('result-status','提交结果未确认');setText('result',error.message);showStatus(error.message,true);renderCases();}
+ if(activeRun||watching)return;
+ const requiresLive=TestDockSecurity.requiresLiveConfirmation(item);
+ if(requiresLive&&!confirm('此用例将写入当前项目测试环境。确认执行 '+item.id+'？'))return;
+ button.disabled=true;
+ await submitActiveRun('/api/run-case',{id:item.id,background:true,...(requiresLive?{confirmLive:item.id}:{})},{caseId:item.id});
 }
 function prepareBatchRequest(mode,suite){
  const selected=allCases.filter(item=>item.suite===suite&&(mode!=='safe'||item.mode==='safe'));
@@ -192,16 +218,33 @@ function prepareBatchRequest(mode,suite){
 async function runBatch(mode){
  if(activeRun||watching)return;if(!selectedSuite){showStatus('请先选择用例分组',true);return;}
  const body=prepareBatchRequest(mode,selectedSuite);if(!body)return;
- watching=true;renderCases();setText('result-status','提交中');setText('result','正在提交 '+body.suite+'…');
+ await submitActiveRun('/api/run',body,{caseId:body.suite,batch:true,mode:body.mode});
+}
+async function submitActiveRun(path,body,details){
+ watching=true;renderCases();setText('result-status','提交中');setText('result','正在提交 '+details.caseId+'…');
  try{
-  const data=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  activeRun={jobId:data.executionId,caseId:body.suite,batch:true,mode:body.mode};saveActiveJob();watching=false;await watchActiveJob();
- }catch(error){watching=false;setText('result-status','提交结果未确认');setText('result',error.message);showStatus(error.message,true);renderCases();}
+  const data=await api(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),
+   onExecutionRequest:requestId=>{activeRun={...details,requestId};saveActiveJob();}});
+  if(typeof data?.executionId!=='string'||!data.executionId)throw new Error('尚未收到有效任务号，请恢复查询。');
+  activeRun={...details,...activeRun,jobId:data.executionId};saveActiveJob();watching=false;await watchActiveJob();
+ }catch(error){
+  watching=false;
+  if(error.requestRejected){activeRun=null;saveActiveJob();}
+  $('job-resume').hidden=!activeRun;
+  setText('result-status',error.requestRejected?'提交被拒绝':'提交结果未确认');
+  setText('result',error.message+(activeRun?.requestId?' · 请求 '+activeRun.requestId:''));
+  showStatus(error.message,true);renderCases();
+ }
 }
 $('only-failed').onclick=()=>{onlyFailed=!onlyFailed;$('only-failed').classList.toggle('on',onlyFailed);renderCases();};
 $('job-resume').addEventListener('click',watchActiveJob);
+$('job-release').addEventListener('click',()=>{
+ if(watching||!activeRun||activeRun.jobId||!confirm('已核验业务状态？解除等待只恢复工作台操作，保留原请求号。'))return;
+ const requestId=activeRun.requestId;activeRun=null;saveActiveJob();$('job-release').hidden=true;$('job-resume').hidden=true;
+ setText('result-status','已解除等待');setText('result','已解除当前界面等待。原请求 '+requestId+'，业务结果以核验为准。');renderCases();
+});
 $('job-cancel').addEventListener('click',async()=>{
- if(!activeRun)return;$('job-cancel').disabled=true;
+ if(!activeRun?.jobId)return;$('job-cancel').disabled=true;
  try{const job=await api('/api/execution/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:activeRun.jobId})});setText('result-status',job.status);if(!watching)await watchActiveJob();}
  catch(error){showStatus(error.message,true);}finally{$('job-cancel').disabled=false;}
 });

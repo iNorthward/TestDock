@@ -25,7 +25,7 @@ from urllib.parse import urlsplit
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'scripts'))
+sys.path[:0] = [str(ROOT), str(ROOT / 'scripts')]
 from create_project_pack import create
 from export_platform import build
 
@@ -69,6 +69,17 @@ status,response=session.get('/echo',params=[('q','a b+c%'),('q','雪')],with_tok
 check('signed query uses actual encoded path',status==200 and response['signatureValid'] and 'q=a+b%2Bc%25' in response['target'])
 status,response=session.get('/deny',with_token=False)
 check('authentication rejection is returned without replay',status==401)
+status,response=session.get('/attachment',with_token=False)
+check('default attachment response keeps only metadata',status==200 and response=={'_binary':True,'_size':5,'_content_type':'application/octet-stream'})
+status,response=session.get('/attachment',with_token=False,max_response_bytes=5)
+check('bounded attachment matches bytes over HTTP',status==200 and response.content==b'\x00\xffbin')
+attachment=response.content
+status,response=session.post('/echo',raw_body=attachment,with_token=False)
+check('downloaded attachment round trip matches original digest',status==200 and response['bodySha256']==hashlib.sha256(attachment).hexdigest())
+status,response=session.get('/attachment',with_token=False,max_response_bytes=4)
+check('oversize attachment exposes no partial bytes',status==200 and response['_response_too_large'] is True and response['_max_bytes']==4)
+status,response=session.get('/deny',with_token=False,max_response_bytes=1024)
+check('bounded call preserves JSON error and HTTP status',status==401 and type(response['signatureValid']) is bool)
 status,response=session.get('/redirect',with_token=False)
 check('signed same-origin redirect is not followed',status==302)
 class Fake:
@@ -109,6 +120,12 @@ def run_acceptance(*, serve=False, state_file=None):
             body = self.rfile.read(int(self.headers.get('Content-Length', '0')))
             path = urlsplit(self.path).path
             valid = hmac.compare_digest(self.headers.get('X-Synthetic-Signature', ''), digest(self.command, self.path, body, self.headers.get('Connection', '')))
+            if path == '/attachment' and valid:
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/octet-stream')
+                self.end_headers()
+                self.wfile.write(b'\x00\xffbin')
+                return
             status = 302 if path == '/redirect' else 401 if path == '/deny' or not valid else 200
             payload = {'signatureValid': valid, 'bodySha256': hashlib.sha256(body).hexdigest(), 'target': self.path}
             self.send_response(status)

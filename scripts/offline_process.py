@@ -92,7 +92,7 @@ def execute(root, plan, *, fixtures=None, inputs=None):
             if (completed.returncode==0)!=bool(python_result['ok']):
                 raise ValueError('离线 worker 退出码与结果不一致')
         if plan['javascript']:
-            command,backend=system_command(['node','--test',*plan['javascript']],profile)
+            command,backend=system_command(['node','--test','--test-reporter=tap',*plan['javascript']],profile)
             node=subprocess.run(command,cwd=root,env=environment,capture_output=True,text=True,timeout=120)
             if node.returncode:
                 print(node.stdout)
